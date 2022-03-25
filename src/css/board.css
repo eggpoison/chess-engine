@@ -12,23 +12,36 @@
    height: var(--cell-size);
 }
 
-#board .cell {
+#board .square {
    width: var(--cell-size);
    height: var(--cell-size);
    display: inline-block;
-   /* position: relative; */
 }
-#board .cell .icon {
+#board .square.square-1 {
+   background-color: #eee;
+}
+#board .square.square-2 {
+   background-color: #444;
+}
+#board .square.square-1.legal-move {
+   background-color: rgb(235, 47, 72);
+}
+#board .square.square-2.legal-move {
+   background-color: rgb(180, 0, 0);
+}
+#board .square .icon {
    --icon-size: 60px;
    width: var(--icon-size);
    height: var(--icon-size);
    background-image: url("../images/piece-icons.png");
    background-size: calc(var(--icon-size) * 6) calc(var(--icon-size) * 2);
    position: absolute;
-   /* top: 50%; */
-   /* left: 50%; */
    transform: translate(calc(var(--cell-size) / 2 - 50%), calc(var(--cell-size) / 2 - 50%));
    cursor: pointer;
    user-select: none;
    -webkit-user-drag: none;
+   z-index: 1;
+}
+#board .square .icon.dragging {
+   z-index: 2;
 }

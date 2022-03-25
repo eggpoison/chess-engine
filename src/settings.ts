@@ -1,7 +1,7 @@
 const SETTINGS = {
-   cellSize: 60,
-   cell1Colour: "#eee",
-   cell2Colour: "#444",
+   squareSize: 60,
+   square1Colour: "#eee",
+   square2Colour: "#444",
    iconSize: 60
 };
 

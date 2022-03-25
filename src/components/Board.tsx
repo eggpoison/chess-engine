@@ -4,176 +4,126 @@ import SETTINGS from "../settings";
 
 type BoardPiece = ["king", 0 | 1] | ["queen", 0 | 1] | ["rook", 0 | 1] | ["knight", 0 | 1] | ["bishop", 0 | 1] | ["pawn", 0 | 1];
 
-type BoardPosition = Array<Array<BoardPiece | null>>;
+type BoardPosition = Array<BoardPiece | null>;
 
 const getDefaultBoardPosition = (): BoardPosition => {
    return [
-      [["rook", 0], ["knight", 0], ["bishop", 0], ["queen", 0], ["king", 0], ["bishop", 0], ["knight", 0], ["rook", 0]],
-      [["pawn", 0], ["pawn", 0], ["pawn", 0], ["pawn", 0], ["pawn", 0], ["pawn", 0], ["pawn", 0], ["pawn", 0]],
-      [null, null, null, null, null, null, null, null],
-      [null, null, null, null, null, null, null, null],
-      [null, null, null, null, null, null, null, null],
-      [null, null, null, null, null, null, null, null],
-      [["pawn", 1], ["pawn", 1], ["pawn", 1], ["pawn", 1], ["pawn", 1], ["pawn", 1], ["pawn", 1], ["pawn", 1]],
-      [["rook", 1], ["knight", 1], ["bishop", 1], ["queen", 1], ["king", 1], ["bishop", 1], ["knight", 1], ["rook", 1]]
+      ["rook", 0], ["knight", 0], ["bishop", 0], ["queen", 0], ["king", 0], ["bishop", 0], ["knight", 0], ["rook", 0],
+      ["pawn", 0], ["pawn", 0], ["pawn", 0], ["pawn", 0], ["pawn", 0], ["pawn", 0], ["pawn", 0], ["pawn", 0],
+      null, null, null, null, null, null, null, null,
+      null, null, null, null, null, null, null, null,
+      null, null, null, null, null, null, null, null,
+      null, null, null, null, null, null, null, null,
+      ["pawn", 1], ["pawn", 1], ["pawn", 1], ["pawn", 1], ["pawn", 1], ["pawn", 1], ["pawn", 1], ["pawn", 1],
+      ["rook", 1], ["knight", 1], ["bishop", 1], ["queen", 1], ["king", 1], ["bishop", 1], ["knight", 1], ["rook", 1]
    ];
 }
 
 const getIconOffset = (piece: BoardPiece): [number, number] => {
-   let x!: number;
-   switch (piece[0]) {
-      case "queen": {
-         x = 0;
-         break;
-      }
-      case "king": {
-         x = 1;
-         break;
-      }
-      case "rook": {
-         x = 2;
-         break;
-      }
-      case "knight": {
-         x = 3;
-         break;
-      }
-      case "bishop": {
-         x = 4;
-         break;
-      }
-      case "pawn": {
-         x = 5;
-         break;
-      }
-   }
+   const pieceNames = ["queen", "king", "rook", "knight", "bishop", "pawn"];
 
-   return [x, piece[1]];
+   const x = pieceNames.indexOf(piece[0]);
+   const y = piece[1];
+
+   return [x, y];
 }
 
 let getBoardPosition: () => BoardPosition;
 
-/**
- * Makes sure that a move is valid depending on the rules of the specific piece type.
- * @param piece The piece.
- * @param startX The x coordinate of where the piece started at.
- * @param startY The y coordinate of where the piece started at.
- * @param x The x coordinate of where the piece wants to move.
- * @param y The y coordinate of where the piece wants to move.
- * @returns Whether the move is valid or not.
- */
-const validateMove = (piece: BoardPiece, startX: number, startY: number, x: number, y: number): boolean => {
-   const position = getBoardPosition();
+const boardSquares = new Array<HTMLElement>(64);
 
-   if (position[y][x] !== null && position[y][x]![1] === piece[1]) return false;
-   
-   const xDist = Math.abs(startX - x);
-   const yDist = Math.abs(startY - y);
+const DIRECTION_OFFSETS: { [key: number]: number } = {
+   0: -8,
+   1: 1,
+   2: 8,
+   3: -1,
+   4: -7,
+   5: 9,
+   6: 7,
+   7: -9
+};
 
-   console.log(startX, startY);
-   switch (piece[0]) {
-      case "queen": {
+const numSquaresToEdge = new Array<Array<number>>(64);
 
-         // If the piece tried to move not on any axis or diagonals
-         if (xDist !== 0 && yDist !== 0 && xDist !== yDist) return false;
+const precomputeMoveData = (): void => {
+   for (let i = 0; i < 8; i++) {
+      for (let j = 0; j < 8; j++) {
+         const numNorth = i;
+         const numEast = 7 - j;
+         const numSouth = 7 - i;
+         const numWest = j;
 
-         // If the piece tried to jump over any others
+         const squareIndex = i * 8 + j;
 
-         if (startY - y > 0) {
-            if (startX - x > 0) {
-               // Top left
-               for (let i = 0; i < xDist - 1; i++) {
-                  const x = startX - i - 1;
-                  const y = startY - i - 1;
-
-                  const piece = position[y][x];
-                  if (piece !== null) return false;
-               }
-            } else if (startX - x < 0) {
-               // Top right
-               for (let i = 0; i < xDist - 1; i++) {
-                  const x = startX + i - 1;
-                  const y = startY - i - 1;
-
-                  const piece = position[y][x];
-                  if (piece !== null) return false;
-               }
-            } else {
-               // Top middle
-               for (let i = 0; i < yDist - 1; i++) {
-                  const x = startX;
-                  const y = startY - i - 1;
-
-                  const piece = position[y][x];
-                  if (piece !== null) return false;
-               }
-            }
-         } else if (startY - y < 0) {
-            if (startX - x > 0) {
-               // Bottom left
-               for (let i = 0; i < xDist - 1; i++) {
-                  const x = startX - i - 1;
-                  const y = startY + i - 1;
-
-                  const piece = position[y][x];
-                  if (piece !== null) return false;
-               }
-            } else if (startX - x < 0) {
-               // Bottom right
-               for (let i = 0; i < xDist - 1; i++) {
-                  const x = startX + i - 1;
-                  const y = startY + i - 1;
-
-                  const piece = position[y][x];
-                  if (piece !== null) return false;
-               }
-            } else {
-               // Bottom middle
-               for (let i = 0; i < yDist - 1; i++) {
-                  const x = startX - 1;
-                  const y = startY + i - 1;
-
-                  const piece = position[y][x];
-                  if (piece !== null) return false;
-               }
-            }
-         } else {
-            if (startX - x < 0) {
-               // Left middle
-               for (let i = 0; i < yDist - 1; i++) {
-                  const x = startX - i - 1;
-                  const y = startY;
-
-                  const piece = position[y][x];
-                  if (piece !== null) return false;
-               }
-            }
-         }
-
-         break;
-      }
-      case "king": {
-         if (xDist > 1 || yDist > 1) return false;
-
-         break;
-      }
-      case "rook": {
-         if (xDist > 0 && yDist > 0) return false;
-
-         break;
+         numSquaresToEdge[squareIndex] = [
+            numNorth,
+            numEast,
+            numSouth,
+            numWest,
+            Math.min(numNorth, numEast),
+            Math.min(numEast, numSouth),
+            Math.min(numSouth, numWest),
+            Math.min(numWest, numNorth)
+         ];
       }
    }
-   return true;
+}
+
+export function setup(): void {
+   precomputeMoveData();
+}
+
+const generateLegalSlidingMoves = (piece: BoardPiece, startSquare: number): Array<number> => {
+   const position = getBoardPosition();
+
+   const startDirectionIndex = piece[0] === "bishop" ? 4 : 0;
+   const endDirectionIndex = piece[0] === "rook" ? 4 : 8;
+
+   const legalMoves = new Array<number>();
+
+   for (let direction = startDirectionIndex; direction < endDirectionIndex; direction++) {
+      for (let i = 0; i < numSquaresToEdge[startSquare][direction]; i++) {
+         const targetSquare = startSquare + DIRECTION_OFFSETS[direction] * (i + 1);
+
+         const targetPiece = position[targetSquare];
+
+         // Move is blocked by a friendly piece, so can't move any further
+         if (targetPiece !== null && targetPiece[1] === piece[1]) {
+            break;
+         }
+
+         legalMoves.push(targetSquare);
+
+         // Captures enemy piece so can't move any further
+         if (targetPiece !== null && targetPiece[1] !== piece[1]) {
+            break;
+         }
+      }
+   }
+
+   return legalMoves;
+}
+
+const generateLegalPieceMoves = (piece: BoardPiece, startSquare: number): Array<number> => {
+   const slidingPieces = ["rook", "bishop", "queen"];
+
+   if (slidingPieces.includes(piece[0])) {
+      return generateLegalSlidingMoves(piece, startSquare);
+   } else {
+      
+   }
+
+   return [];
 }
 
 interface PieceIconProps {
    piece: BoardPiece;
-   move: (startX: number, startY: number, x: number, y: number) => void;
-   startX: number;
-   startY: number;
+   movePiece: (startSquare: number, targetSquare: number) => void;
+   startSquare: number;
 }
-const PieceIcon = ({ piece, move, startX, startY }: PieceIconProps) => {
+const Piece = ({ piece, movePiece: move, startSquare }: PieceIconProps) => {
    const elemRef = useRef<HTMLDivElement>(null);
+   const legalMoves = useRef<Array<number> | null>(null);
 
    const [xOffset, yOffset] = getIconOffset(piece);
    const style: React.CSSProperties = {
@@ -181,15 +131,35 @@ const PieceIcon = ({ piece, move, startX, startY }: PieceIconProps) => {
       backgroundPositionY: `${yOffset * SETTINGS.iconSize}px`
    }
 
+   const startMove = (): void => {
+      // Generate legal moves
+      legalMoves.current = generateLegalPieceMoves(piece, startSquare);
+
+      // Colour squares with legal moves red
+      for (const legalMove of legalMoves.current) {
+         const square = boardSquares[legalMove];
+
+         square.classList.add("legal-move");
+      }
+
+      const elem = elemRef.current!;
+      elem.classList.add("dragging");
+   }
+
    const mouseUp = useCallback((): void => {
+      const startX = startSquare % 8;
+      const startY = Math.floor(startSquare / 8);
+
       const cancelMove = (): void => {
          document.removeEventListener("mouseup", mouseUp);
          document.removeEventListener("mousemove", mouseMove);
    
          // Reset piece position
          const elem = elemRef.current!;
-         elem.style.left = startX * SETTINGS.cellSize + "px";
-         elem.style.top = startY * SETTINGS.cellSize + "px";
+         elem.style.left = startX * SETTINGS.squareSize + "px";
+         elem.style.top = startY * SETTINGS.squareSize + "px";
+
+         elem.classList.remove("dragging");
       };
 
       const event = window.event as MouseEvent;
@@ -202,26 +172,36 @@ const PieceIcon = ({ piece, move, startX, startY }: PieceIconProps) => {
       const x = mouseX - boardBounds.x;
       const y = mouseY - boardBounds.y;
 
-      const cellX = Math.floor(x / SETTINGS.cellSize);
-      const cellY = Math.floor(y / SETTINGS.cellSize);
+      const cellX = Math.floor(x / SETTINGS.squareSize);
+      const cellY = Math.floor(y / SETTINGS.squareSize);
 
-      if (cellX === startX && cellY === startY) {
+      const targetSquare = cellY * 8 + cellX;
+
+      if (startSquare === targetSquare || !legalMoves.current!.includes(targetSquare)) {
          cancelMove();
          return;
       }
-      if (cellX >= 0 && cellX < 8 && cellY >= 0 && cellY < 8) {
-         const moveIsValid = validateMove(piece, startX, startY, cellX, cellY);
 
-         if (moveIsValid) {
-            // Move the piece
-            move(startX, startY, cellX, cellY);
-         } else {
-            cancelMove();
+      if (cellX >= 0 && cellX < 8 && cellY >= 0 && cellY < 8) {
+         // Move the piece
+         move(startSquare, targetSquare);
+
+         document.removeEventListener("mouseup", mouseUp);
+         document.removeEventListener("mousemove", mouseMove);
+
+         const elem = elemRef.current!;
+         elem.remove();
+
+         // Uncolour the squares
+         for (const legalMove of legalMoves.current!) {
+            const square = boardSquares[legalMove];
+
+            square.classList.remove("legal-move");
          }
       } else {
          cancelMove();
       }
-   }, [move, piece, startX, startY]);
+   }, [move, startSquare]);
 
    const mouseMove = (): void => {
       const event = window.event as MouseEvent;
@@ -240,6 +220,8 @@ const PieceIcon = ({ piece, move, startX, startY }: PieceIconProps) => {
    const mouseDown = (): void => {
       document.addEventListener("mousemove", mouseMove);
       document.addEventListener("mouseup", mouseUp);
+
+      startMove();
    }
 
    useEffect(() => {
@@ -252,9 +234,37 @@ const PieceIcon = ({ piece, move, startX, startY }: PieceIconProps) => {
    return <div ref={elemRef} onMouseDown={mouseDown} style={style} className="icon"></div>;
 }
 
+interface SquareProps {
+   squareIndex: number;
+   piece: BoardPiece | null;
+   movePiece: (startSquare: number, targetSquare: number) => void;
+}
+const Square = ({ squareIndex, piece, movePiece }: SquareProps) => {
+   const squareRef = useRef<HTMLDivElement | null>(null);
+
+   useEffect(() => {
+      boardSquares[squareIndex] = squareRef.current!;
+   }, [squareIndex]);
+
+   const icon = useRef<JSX.Element | null>(null);
+   if (piece !== null) {
+      icon.current = <Piece piece={piece} movePiece={movePiece} startSquare={squareIndex} />;
+   }
+
+   let className = "square";
+   if ((squareIndex + Math.floor(squareIndex / 8)) % 2 === 0) {
+      className += " square-1";
+   } else {
+      className += " square-2";
+   }
+   return <div ref={squareRef} className={className}>
+      {icon.current}
+   </div>;
+}
+
 const Board = () => {
    const [position, setPosition] = useState<BoardPosition>(getDefaultBoardPosition());
-   const [currentPlayer, setCurrentPlayer] = useState<0 | 1>(1);
+   const player = useRef<0 | 1>(1);
 
    useEffect(() => {
       getBoardPosition = (): BoardPosition => {
@@ -262,39 +272,31 @@ const Board = () => {
       }
    }, [position]);
 
-   const movePiece = (startX: number, startY: number, x: number, y: number): void => {
+   const movePiece = (startSquare: number, targetSquare: number): void => {
+      // Switch current player
+      const newPlayer = (player.current + 1) % 2 as 0 | 1;
+      player.current = newPlayer;
+
       // Get the piece which is moving
-      const piece = position[startY][startX];
+      const piece = position.slice()[startSquare];
 
       // Make the new position
       const newPosition = position.slice();
-      newPosition[startY][startX] = null;
-      newPosition[y][x] = piece;
+      newPosition[startSquare] = null;
+      newPosition[targetSquare] = piece;
       setPosition(newPosition);
-
-      // Switch player to move
-      const newPlayer = (currentPlayer + 1) % 2 as 0 | 1;
-      setCurrentPlayer(newPlayer);
    }
 
    const content = new Array<JSX.Element>();
    for (let i = 0; i < 8; i++) {
       const rowCells = new Array<JSX.Element>();
       for (let j = 0; j < 8; j++) {
-         const piece = position[i][j];
+         const squareIndex = i * 8 + j;
 
-         let icon = undefined;
-         if (piece !== null) {
-            icon = <PieceIcon piece={piece} move={movePiece} startX={j} startY={i} />;
-         }
-
-         const style: React.CSSProperties = {
-            backgroundColor: (i + j) % 2 ? SETTINGS.cell2Colour : SETTINGS.cell1Colour
-         };
-         const cell = <div style={style} className="cell" key={j}>
-            {icon}
-         </div>;
-         rowCells.push(cell);
+         const piece = position[squareIndex];
+         
+         const square = <Square squareIndex={squareIndex} piece={piece} movePiece={movePiece} key={j} />;
+         rowCells.push(square);
       }
 
       const row = <div className="row" key={i}>
