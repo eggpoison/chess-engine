@@ -16,6 +16,8 @@
    width: var(--cell-size);
    height: var(--cell-size);
    display: inline-block;
+   user-select: none;
+   -webkit-user-drag: none;
 }
 #board .square.square-1 {
    background-color: #eee;

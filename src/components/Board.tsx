@@ -104,16 +104,102 @@ const generateLegalSlidingMoves = (piece: BoardPiece, startSquare: number): Arra
    return legalMoves;
 }
 
+const generateLegalMiscMoves = (piece: BoardPiece, startSquare: number): Array<number> => {
+   const position = getBoardPosition();
+
+   const legalMoves = new Array<number>();
+
+   switch (piece[0]) {
+      case "king": {
+         const squaresToEdge = numSquaresToEdge[startSquare];
+
+         for (let i = 0; i < 8; i++) {
+            if (squaresToEdge[i] === 0) continue;
+
+            const offset = DIRECTION_OFFSETS[i];
+
+            const targetSquare = startSquare + offset;
+            const targetPiece = position[targetSquare];
+
+            if (!(targetPiece !== null && targetPiece[1] === piece[1])) {
+               legalMoves.push(targetSquare);
+            }
+         }
+
+         break;
+      }
+      case "knight": {
+         // maaagic
+
+         const squaresToEdge = numSquaresToEdge[startSquare];
+
+         for (let i = 0; i < 8; i++) {
+            const half = Math.floor(i / 2);
+
+            const cornerOffset = DIRECTION_OFFSETS[4 + half];
+
+            const offsetIdx = (half + i % 2) % 4;
+            const offset = DIRECTION_OFFSETS[offsetIdx];
+            
+            const mainSquaresToEdge = squaresToEdge[offsetIdx];
+            const minorSquaresToEdge = squaresToEdge[(half + 1 - i % 2) % 4];
+            
+            if (mainSquaresToEdge < 2 || minorSquaresToEdge === 0) continue;
+
+            const targetSquare = startSquare + cornerOffset + offset;
+            const targetPiece = position[targetSquare];
+            if (!(targetPiece !== null && targetPiece[1] === piece[1])) {
+               legalMoves.push(targetSquare);
+            }
+         }
+
+         break;
+      }
+      case "pawn": {
+         const direction = piece[1] === 1 ? -1 : 1;
+
+         // Forwards move
+         const targetSquare = startSquare + 8 * direction;
+         if (position[targetSquare] === null) {
+            legalMoves.push(targetSquare);
+         }
+
+         // Double move
+         if (Math.floor(startSquare / 8) === (piece[1] === 1 ? 6 : 1)) {
+            const targetSquare = startSquare + (piece[1] === 1 ? -16 : 16);
+            legalMoves.push(targetSquare);
+         }
+
+         // Capture moves
+         for (let i = 0; i < 2; i++) {
+            const xOffset = i === 0 ? -1 : 1;
+
+            // Stop from wrapping around
+            if ((xOffset === -1 && startSquare % 8 === 0) || (xOffset === 1 && startSquare % 8 === 7)) continue;
+
+            const targetSquare = startSquare + 8 * direction + xOffset;
+            const targetPiece = position[targetSquare];
+
+            if (targetPiece !== null && targetPiece[1] !== piece[1]) {
+               legalMoves.push(targetSquare);
+            }
+         }
+
+         break;
+      }
+   }
+
+   return legalMoves;
+}
+
 const generateLegalPieceMoves = (piece: BoardPiece, startSquare: number): Array<number> => {
    const slidingPieces = ["rook", "bishop", "queen"];
 
    if (slidingPieces.includes(piece[0])) {
       return generateLegalSlidingMoves(piece, startSquare);
    } else {
-      
+      return generateLegalMiscMoves(piece, startSquare);
    }
-
-   return [];
 }
 
 interface PieceIconProps {
@@ -189,10 +275,7 @@ const Piece = ({ piece, movePiece: move, startSquare }: PieceIconProps) => {
          document.removeEventListener("mouseup", mouseUp);
          document.removeEventListener("mousemove", mouseMove);
 
-         const elem = elemRef.current!;
-         elem.remove();
-
-         // Uncolour the squares
+         // Uncolour the squares with legal moves
          for (const legalMove of legalMoves.current!) {
             const square = boardSquares[legalMove];
 
@@ -241,15 +324,23 @@ interface SquareProps {
 }
 const Square = ({ squareIndex, piece, movePiece }: SquareProps) => {
    const squareRef = useRef<HTMLDivElement | null>(null);
+   const [icon, setIcon] = useState<JSX.Element | null>(null);
 
    useEffect(() => {
       boardSquares[squareIndex] = squareRef.current!;
    }, [squareIndex]);
 
-   const icon = useRef<JSX.Element | null>(null);
-   if (piece !== null) {
-      icon.current = <Piece piece={piece} movePiece={movePiece} startSquare={squareIndex} />;
-   }
+   useEffect(() => {
+      if (piece !== null) {
+         setIcon(
+            <Piece piece={piece} movePiece={movePiece} startSquare={squareIndex} />
+         );
+      }
+
+      return () => {
+         setIcon(null);
+      }
+   }, [piece, movePiece, squareIndex]);
 
    let className = "square";
    if ((squareIndex + Math.floor(squareIndex / 8)) % 2 === 0) {
@@ -258,7 +349,7 @@ const Square = ({ squareIndex, piece, movePiece }: SquareProps) => {
       className += " square-2";
    }
    return <div ref={squareRef} className={className}>
-      {icon.current}
+      {icon}
    </div>;
 }
 
@@ -272,20 +363,20 @@ const Board = () => {
       }
    }, [position]);
 
-   const movePiece = (startSquare: number, targetSquare: number): void => {
+   const movePiece = useCallback((startSquare: number, targetSquare: number): void => {
       // Switch current player
       const newPlayer = (player.current + 1) % 2 as 0 | 1;
       player.current = newPlayer;
 
       // Get the piece which is moving
-      const piece = position.slice()[startSquare];
+      const piece = position[startSquare];
 
       // Make the new position
       const newPosition = position.slice();
       newPosition[startSquare] = null;
       newPosition[targetSquare] = piece;
       setPosition(newPosition);
-   }
+   }, [position]);
 
    const content = new Array<JSX.Element>();
    for (let i = 0; i < 8; i++) {
