@@ -202,12 +202,12 @@ const generateLegalPieceMoves = (piece: BoardPiece, startSquare: number): Array<
    }
 }
 
-interface PieceIconProps {
+interface PieceProps {
    piece: BoardPiece;
    movePiece: (startSquare: number, targetSquare: number) => void;
    startSquare: number;
 }
-const Piece = ({ piece, movePiece: move, startSquare }: PieceIconProps) => {
+const Piece = ({ piece, movePiece: move, startSquare }: PieceProps) => {
    const elemRef = useRef<HTMLDivElement>(null);
    const legalMoves = useRef<Array<number> | null>(null);
 
@@ -236,6 +236,15 @@ const Piece = ({ piece, movePiece: move, startSquare }: PieceIconProps) => {
       const startX = startSquare % 8;
       const startY = Math.floor(startSquare / 8);
 
+      const uncolourLegalMoves = (): void => {
+         // Uncolour the squares with legal moves
+         for (const legalMove of legalMoves.current!) {
+            const square = boardSquares[legalMove];
+
+            square.classList.remove("legal-move");
+         }
+      }
+
       const cancelMove = (): void => {
          document.removeEventListener("mouseup", mouseUp);
          document.removeEventListener("mousemove", mouseMove);
@@ -246,6 +255,8 @@ const Piece = ({ piece, movePiece: move, startSquare }: PieceIconProps) => {
          elem.style.top = startY * SETTINGS.squareSize + "px";
 
          elem.classList.remove("dragging");
+
+         uncolourLegalMoves();
       };
 
       const event = window.event as MouseEvent;
@@ -275,12 +286,7 @@ const Piece = ({ piece, movePiece: move, startSquare }: PieceIconProps) => {
          document.removeEventListener("mouseup", mouseUp);
          document.removeEventListener("mousemove", mouseMove);
 
-         // Uncolour the squares with legal moves
-         for (const legalMove of legalMoves.current!) {
-            const square = boardSquares[legalMove];
-
-            square.classList.remove("legal-move");
-         }
+         uncolourLegalMoves();
       } else {
          cancelMove();
       }
