@@ -12,3 +12,13 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+#current-player {
+  font-size: 2.5rem;
+  width: 100%;
+  color: #fff;
+  text-align: center;
+  margin: 0;
+  position: absolute;
+  top: 2rem;
+}

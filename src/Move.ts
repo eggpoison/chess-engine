@@ -2,7 +2,8 @@ import Piece from "./Piece";
 
 export enum MoveFlags {
    None,
-   IsCastling
+   IsCastling,
+   QueenPromotion
 }
 
 class Move {
@@ -14,8 +15,6 @@ class Move {
    constructor(piece: Piece, targetSquare: number, flags?: MoveFlags) {
       this.piece = piece;
       this.targetSquare = targetSquare;
-
-      // console.log(flags);
 
       if (typeof flags !== "undefined") {
          this.flags = flags;

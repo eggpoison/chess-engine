@@ -46,12 +46,13 @@ const precomputeMoveData = (): void => {
 export function setup(): void {
    precomputeMoveData();
 }
+setup();
 
 export function applyMove(board: Board, move: Move): Board {
    move.piece.timesMoved++;
-
+   
    // Make the new position
-   const newBoard = new Board(board.squares);
+   const newBoard = new Board(board.squares, board.whiteAttackedSquares, board.blackAttackedSquares);
 
    switch (move.flags) {
       case MoveFlags.None: {
@@ -92,12 +93,19 @@ export function applyMove(board: Board, move: Move): Board {
       }
    }
 
+   // Recalculate attacked squares
+   if (move.piece.colour === PlayerColours.White) {
+      newBoard.whiteAttackedSquares = Board.calculateAttackedSquares(newBoard, PlayerColours.White);
+   } else {
+      newBoard.blackAttackedSquares = Board.calculateAttackedSquares(newBoard, PlayerColours.Black);
+   }
+
    move.piece.square = move.targetSquare;
 
    return newBoard;
 }
 
-const generateLegalSlidingMoves = (board: Board, piece: Piece): Array<Move> => {
+const generateSlidingMoves = (board: Board, piece: Piece, allowOwnColour: boolean): Array<Move> => {
    const startDirectionIndex = piece.type === PieceTypes.Bishop ? 4 : 0;
    const endDirectionIndex = piece.type === PieceTypes.Rook ? 4 : 8;
 
@@ -111,6 +119,11 @@ const generateLegalSlidingMoves = (board: Board, piece: Piece): Array<Move> => {
 
          // Move is blocked by a friendly piece, so can't move any further
          if (targetPiece !== null && targetPiece.colour === piece.colour) {
+            if (allowOwnColour) {
+               const move = new Move(piece, targetSquare);
+               moves.push(move);
+            }
+
             break;
          }
 
@@ -127,7 +140,7 @@ const generateLegalSlidingMoves = (board: Board, piece: Piece): Array<Move> => {
    return moves;
 }
 
-const generateLegalMiscMoves = (board: Board, piece: Piece): Array<Move> => {
+const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean): Array<Move> => {
    const legalMoves = new Array<Move>();
 
    const addRegularMove = (targetSquare: number): void => {
@@ -148,7 +161,7 @@ const generateLegalMiscMoves = (board: Board, piece: Piece): Array<Move> => {
             const targetSquare = piece.square + offset;
             const targetPiece = board.squares[targetSquare];
 
-            if (!(targetPiece !== null && targetPiece.colour === piece.colour)) {
+            if (targetPiece === null || (targetPiece.colour !== piece.colour || allowOwnColour)) {
                addRegularMove(targetSquare);
             }
          }
@@ -211,7 +224,7 @@ const generateLegalMiscMoves = (board: Board, piece: Piece): Array<Move> => {
 
             const targetSquare = piece.square + cornerOffset + offset;
             const targetPiece = board.squares[targetSquare];
-            if (!(targetPiece !== null && targetPiece.colour === piece.colour)) {
+            if (!(targetPiece !== null && (targetPiece.colour === piece.colour && !allowOwnColour))) {
                addRegularMove(targetSquare);
             }
          }
@@ -243,7 +256,7 @@ const generateLegalMiscMoves = (board: Board, piece: Piece): Array<Move> => {
             const targetSquare = piece.square + 8 * direction + xOffset;
             const targetPiece = board.squares[targetSquare];
 
-            if (targetPiece !== null && targetPiece.colour !== piece.colour) {
+            if (targetPiece !== null && (targetPiece.colour !== piece.colour || allowOwnColour)) {
                addRegularMove(targetSquare);
             }
          }
@@ -255,13 +268,19 @@ const generateLegalMiscMoves = (board: Board, piece: Piece): Array<Move> => {
    return legalMoves;
 }
 
-export function generateLegalPieceMoves(board: Board, piece: Piece): Array<Move> {
+/**
+ * Generates all possible moves for a piece
+ * @param board The board
+ * @param piece The piece
+ * @param allowOwnColour If true, the function will include moves which attack its own pieces
+ */
+export function generatePieceMoves(board: Board, piece: Piece, allowOwnColour: boolean = false): Array<Move> {
    const slidingPieces = [PieceTypes.Rook, PieceTypes.Bishop, PieceTypes.Queen];
 
    if (slidingPieces.includes(piece.type)) {
-      return generateLegalSlidingMoves(board, piece);
+      return generateSlidingMoves(board, piece, allowOwnColour);
    } else {
-      return generateLegalMiscMoves(board, piece);
+      return generateMiscMoves(board, piece, allowOwnColour);
    }
 }
 
@@ -271,7 +290,7 @@ const generateAllPossibleMoves = (board: Board): Array<Move> => {
       const piece = board.squares[square];
       if (piece === null || piece.colour === PlayerColours.White) continue;
          
-      const pieceMoves = generateLegalPieceMoves(board, piece);
+      const pieceMoves = generatePieceMoves(board, piece);
       moves = moves.concat(pieceMoves);
    }
 

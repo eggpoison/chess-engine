@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AudioFromFile from "../AudioFromFile";
 import Board from "../Board";
-import { applyMove, generateComputerMove, generateLegalPieceMoves, PlayerColours } from "../computer-ai";
+import { applyMove, generateComputerMove, generatePieceMoves, PlayerColours } from "../computer-ai";
 import "../css/board.css";
 import Move, { MoveFlags } from "../Move";
 import Piece, { PieceTypes } from "../Piece";
@@ -77,9 +77,7 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
 
    const startMove = (): void => {
       // Generate legal moves
-      // console.log(gameBoard.squares.slice());
-      // console.log(piece);
-      legalMoves.current = generateLegalPieceMoves(gameBoard, piece);
+      legalMoves.current = generatePieceMoves(gameBoard, piece);
 
       // Colour squares with legal moves red
       for (const legalMove of legalMoves.current) {
@@ -246,6 +244,19 @@ const Square = ({ squareIndex, piece, movePiece }: SquareProps) => {
 export const BoardElem = () => {
    const [currentPlayer, setCurrentPlayer] = useState<PlayerColours>(PlayerColours.White);
 
+   useEffect(() => {
+      // console.log(gameBoard.squares);
+      
+      for (let i = 0; i < 64; i++) {
+         const squareElem = boardSquares[i];
+         if (gameBoard.whiteAttackedSquares.hasOwnProperty(i)) {
+            squareElem.style.backgroundColor = "blue";
+         } else {
+            squareElem.style.backgroundColor = "red";
+         }
+      }
+   }, [currentPlayer]);
+
    const movePiece = useCallback((move: Move): void => {
       move.piece.timesMoved++;
 
@@ -303,9 +314,11 @@ export const BoardElem = () => {
       content.push(row);
    }
 
-   return (
+   return <>
+      <h1 id="current-player">{currentPlayer === PlayerColours.White ? "White To Move" : "Black To Move"}</h1>
+
       <div id="board">
          {content}
       </div>
-   );
+   </>;
 }
