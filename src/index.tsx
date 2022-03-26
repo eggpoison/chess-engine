@@ -1,12 +1,13 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import Board, { setup } from './components/Board';
+import { BoardElem } from './components/Game';
+import { setup } from "./computer-ai";
 
 import './css/index.css';
 
 ReactDOM.render(
   <React.StrictMode>
-    <Board />
+    <BoardElem />
   </React.StrictMode>,
   document.getElementById('root')
 );

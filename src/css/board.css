@@ -20,13 +20,13 @@
    -webkit-user-drag: none;
 }
 #board .square.square-1 {
-   background-color: #eee;
+   background-color: rgb(245, 230, 166);
 }
 #board .square.square-2 {
-   background-color: #444;
+   background-color: rgb(105, 60, 0);
 }
 #board .square.square-1.legal-move {
-   background-color: rgb(235, 47, 72);
+   background-color: rgb(243, 73, 96);
 }
 #board .square.square-2.legal-move {
    background-color: rgb(180, 0, 0);
