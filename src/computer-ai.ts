@@ -182,12 +182,6 @@ const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean):
             const rook = board.squares[piece.square + rookSquareOffset];
             
             // If the square isn't a rook or the rook has already moved, isn't legal move
-            if (typeof rook === "undefined") {
-               console.log("Castling rights:", board.castlingRights);
-               console.log("Castling index:", castlingIndex);
-               console.log("King square:", piece.square);
-               console.log("Rook square:", piece.square + rookSquareOffset);
-            }
             if (rook === null || rook.type !== PieceTypes.Rook) {
                continue;
             }
@@ -327,6 +321,8 @@ export function validatePseudoLegalMoves(board: Board, pseudoLegalMoves: Array<M
    const opponentColour = colour ? 0 : 1;
    for (const moveToVerify of pseudoLegalMoves) {
 
+      const castlingRightsBeforeMove = board.castlingRights;
+
       // Generate all possible responses to the move
       board.makeMove(moveToVerify);
       const opponentResponses: Array<Move> = generatePseudoLegalMoves(board, opponentColour);
@@ -351,7 +347,7 @@ export function validatePseudoLegalMoves(board: Board, pseudoLegalMoves: Array<M
          legalMoves.push(moveToVerify);
       }
 
-      board.unmakeMove(moveToVerify);
+      board.unmakeMove(moveToVerify, castlingRightsBeforeMove);
    }
 
    return legalMoves;

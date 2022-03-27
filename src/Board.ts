@@ -74,7 +74,14 @@ class Board {
       return attackedSquares;
    }
 
-   private updateCastlingRights(piece: Piece, type: "add" | "remove"): void {
+   private updateCastlingRights(move: Move, type: "make" | "unmake", castlingRightsBeforeMove?: number): void {
+      let piece!: Piece;
+      if (type === "make") {
+         piece = this.squares[move.startSquare]!;
+      } else {
+         piece = this.squares[move.targetSquare]!;
+      }
+
       const colour = piece.colour;
 
       let castleIndexes: Array<keyof typeof CastlingIndexes> = new Array<keyof typeof CastlingIndexes>();
@@ -82,7 +89,7 @@ class Board {
          castleIndexes = ["k", "q"];
       } else {
          // Check if the rook is kingside or queenside
-         if (piece.square % 8 === 0) {
+         if (move.startSquare % 8 === 0) {
             // Kingside
             castleIndexes = ["k"];
          } else {
@@ -97,11 +104,18 @@ class Board {
 
       for (const index of castleIndexes) {
          const rights = CastlingIndexes[index];
-         const canCastle = this.canCastle(index);
 
-         if (canCastle && type === "remove") {
+         if (typeof castlingRightsBeforeMove !== "undefined") {
+            const hadCastledBeforeMove = (castlingRightsBeforeMove & rights) === rights;
+            if (!hadCastledBeforeMove) {
+               continue;
+            }
+         }
+
+         const canCastle = this.canCastle(index);
+         if (type === "make" && canCastle) {
             this.castlingRights -= rights;
-         } else if (!canCastle && type === "add") {
+         } else if (type === "unmake" && !canCastle) {
             this.castlingRights += rights;
          }
       }
@@ -112,7 +126,7 @@ class Board {
 
       // If the piece is a king or a rook, remove the possibility to castle
       if (movingPiece.type === PieceTypes.King || movingPiece.type === PieceTypes.Rook) {
-         this.updateCastlingRights(movingPiece, "remove");
+         this.updateCastlingRights(move, "make");
       }
 
       // Update the captured piece
@@ -160,12 +174,12 @@ class Board {
       this.attackedSquares[movingPiece.colour] = Board.calculateAttackedSquares(this, movingPiece.colour);
    }
 
-   unmakeMove(move: Move): void {
+   unmakeMove(move: Move, castlingRightsBeforeMove: number): void {
       const movedPiece = this.squares[move.targetSquare]!
 
       // If the piece is a king or a rook, remove the possibility to castle
       if (movedPiece.type === PieceTypes.King || movedPiece.type === PieceTypes.Rook) {
-         this.updateCastlingRights(movedPiece, "add");
+         this.updateCastlingRights(move, "unmake", castlingRightsBeforeMove);
       }
 
       const opposingColour = +!movedPiece.colour;
