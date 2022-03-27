@@ -7,8 +7,7 @@ import Move, { MoveFlags } from "../Move";
 import Piece, { PieceTypes } from "../Piece";
 import SETTINGS from "../settings";
 
-// const startingPositionFenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"; 
-const startingPositionFenString = "r3k3/p3p1P1/P3P3/8/8/8/PPPPPPPP/RNBQKBNR w KQq - 0 1"; 
+const startingPositionFenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"; 
 export let gameBoard: Board = generateBoardFromFen(startingPositionFenString);
 
 const getIconOffset = (piece: Piece): [number, number] => {
