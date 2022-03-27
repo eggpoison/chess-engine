@@ -43,6 +43,59 @@ const precomputeMoveData = (): void => {
    }
 }
 
+const FEN_PIECE_REFERENCES: { [key: string]: PieceTypes } = {
+   "k": PieceTypes.King,
+   "q": PieceTypes.Queen,
+   "r": PieceTypes.Rook,
+   "n": PieceTypes.Knight,
+   "b": PieceTypes.Bishop,
+   "p": PieceTypes.Pawn
+}
+
+export function generateBoardFromFen(fen: string): Board {
+   const squares = new Array<Piece | null>(64);
+   
+   const fields = fen.split(" ");
+
+   const ranks = fields[0].split("/");
+   console.log(ranks);
+   for (let i = 0; i < 8; i++) {
+      const rank = ranks[i];
+
+      let square = i * 8;
+      for (const char of rank.split("")) {
+         // If the character is a number, skip that number of squares
+         const num = Number(char);
+         const charIsNumber = !isNaN(num);
+         if (charIsNumber) {
+            // Fill the skipped squares with null
+            for (let j = 0; j < num; j++) {
+               squares[square + j] = null;
+            }
+
+            square += num;
+            continue;
+         }
+
+         const lowerChar = char.toLowerCase();
+
+         // Get the piece colour
+         const pieceColour: PlayerColours = char === lowerChar ? PlayerColours.Black : PlayerColours.White;
+
+         // Add the piece to the board squares
+         const pieceType: PieceTypes = FEN_PIECE_REFERENCES[lowerChar];
+         const piece = new Piece(pieceType, pieceColour, square);
+         squares[square] = piece;
+
+         square++;
+      }
+   }
+
+   const board = new Board(squares);
+   console.log(board);
+   return board;
+}
+
 export function setup(): void {
    precomputeMoveData();
 }
@@ -93,14 +146,14 @@ export function applyMove(board: Board, move: Move): Board {
       }
    }
 
+   move.piece.square = move.targetSquare;
+
    // Recalculate attacked squares
    if (move.piece.colour === PlayerColours.White) {
       newBoard.whiteAttackedSquares = Board.calculateAttackedSquares(newBoard, PlayerColours.White);
    } else {
       newBoard.blackAttackedSquares = Board.calculateAttackedSquares(newBoard, PlayerColours.Black);
    }
-
-   move.piece.square = move.targetSquare;
 
    return newBoard;
 }
@@ -236,12 +289,12 @@ const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean):
 
          // Forwards move
          const targetSquare = piece.square + 8 * direction;
-         if (board.squares[targetSquare] === null) {
+         if (!allowOwnColour && board.squares[targetSquare] === null) {
             addRegularMove(targetSquare);
          }
 
          // Double move
-         if (Math.floor(piece.square / 8) === (piece.colour === PlayerColours.White ? 6 : 1)) {
+         if (!allowOwnColour && Math.floor(piece.square / 8) === (piece.colour === PlayerColours.White ? 6 : 1)) {
             const targetSquare = piece.square + (piece.colour === PlayerColours.White ? -16 : 16);
             addRegularMove(targetSquare);
          }
@@ -256,7 +309,7 @@ const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean):
             const targetSquare = piece.square + 8 * direction + xOffset;
             const targetPiece = board.squares[targetSquare];
 
-            if (targetPiece !== null && (targetPiece.colour !== piece.colour || allowOwnColour)) {
+            if (allowOwnColour || (targetPiece !== null && targetPiece.colour !== piece.colour)) {
                addRegularMove(targetSquare);
             }
          }
@@ -284,11 +337,11 @@ export function generatePieceMoves(board: Board, piece: Piece, allowOwnColour: b
    }
 }
 
-const generateAllPossibleMoves = (board: Board): Array<Move> => {
+const generateAllPossibleMoves = (board: Board, colour: PlayerColours): Array<Move> => {
    let moves = new Array<Move>();
    for (let square = 0; square < 64; square++) {
       const piece = board.squares[square];
-      if (piece === null || piece.colour === PlayerColours.White) continue;
+      if (piece === null || piece.colour !== colour) continue;
          
       const pieceMoves = generatePieceMoves(board, piece);
       moves = moves.concat(pieceMoves);
@@ -298,7 +351,7 @@ const generateAllPossibleMoves = (board: Board): Array<Move> => {
 }
 
 export function generateComputerMove(board: Board): Move {
-   const moves: Array<Move> = generateAllPossibleMoves(board);
+   const moves: Array<Move> = generateAllPossibleMoves(board, PlayerColours.Black);
 
    const randomMove = moves[Math.floor(Math.random() * moves.length)];
    return randomMove;

@@ -1,54 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AudioFromFile from "../AudioFromFile";
 import Board from "../Board";
-import { applyMove, generateComputerMove, generatePieceMoves, PlayerColours } from "../computer-ai";
+import { applyMove, generateBoardFromFen, generateComputerMove, generatePieceMoves, PlayerColours } from "../computer-ai";
 import "../css/board.css";
 import Move, { MoveFlags } from "../Move";
 import Piece, { PieceTypes } from "../Piece";
 import SETTINGS from "../settings";
 
-const getDefaultBoardPosition = (): Board => {
-   let squares = new Array<Piece | null>();
-
-   const getMainRank = (colour: PlayerColours): Array<Piece> => {
-      return [
-         new Piece(PieceTypes.Rook, colour, squares.length),
-         new Piece(PieceTypes.Knight, colour, squares.length + 1),
-         new Piece(PieceTypes.Bishop, colour, squares.length + 2),
-         new Piece(PieceTypes.Queen, colour, squares.length + 3),
-         new Piece(PieceTypes.King, colour, squares.length + 4),
-         new Piece(PieceTypes.Bishop, colour, squares.length + 5),
-         new Piece(PieceTypes.Knight, colour, squares.length + 6),
-         new Piece(PieceTypes.Rook, colour, squares.length + 7)
-      ];
-   }
-
-   const getPawnRank = (colour: PlayerColours): Array<Piece> => {
-      const rank = new Array<Piece>();
-      for (let i = 0; i < 8; i++) {
-         rank.push(new Piece(PieceTypes.Pawn, colour, squares.length + i));
-      }
-      return rank;
-   }
-
-   // Black pieces
-   squares = squares.concat(...getMainRank(PlayerColours.Black));
-   squares = squares.concat(...getPawnRank(PlayerColours.Black));
-
-   // Create the 4 empty ranks
-   for (let i = 0; i < 32; i++) {
-      squares.push(null);
-   }
-
-   // White pieces
-   squares = squares.concat(...getPawnRank(PlayerColours.White));
-   squares = squares.concat(...getMainRank(PlayerColours.White));
-
-   const board = new Board(squares);
-   return board;
-}
-
-export let gameBoard: Board = getDefaultBoardPosition();
+const startingPositionFenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"; 
+export let gameBoard: Board = generateBoardFromFen(startingPositionFenString);
 
 const getIconOffset = (piece: Piece): [number, number] => {
    const x = piece.type;
@@ -244,18 +204,16 @@ const Square = ({ squareIndex, piece, movePiece }: SquareProps) => {
 export const BoardElem = () => {
    const [currentPlayer, setCurrentPlayer] = useState<PlayerColours>(PlayerColours.White);
 
-   useEffect(() => {
-      // console.log(gameBoard.squares);
-      
-      for (let i = 0; i < 64; i++) {
-         const squareElem = boardSquares[i];
-         if (gameBoard.whiteAttackedSquares.hasOwnProperty(i)) {
-            squareElem.style.backgroundColor = "blue";
-         } else {
-            squareElem.style.backgroundColor = "red";
-         }
-      }
-   }, [currentPlayer]);
+   // useEffect(() => {
+   //    for (let i = 0; i < 64; i++) {
+   //       const squareElem = boardSquares[i];
+   //       if (gameBoard.whiteAttackedSquares.hasOwnProperty(i)) {
+   //          squareElem.style.backgroundColor = "blue";
+   //       } else {
+   //          squareElem.style.backgroundColor = "red";
+   //       }
+   //    }
+   // }, [currentPlayer]);
 
    const movePiece = useCallback((move: Move): void => {
       move.piece.timesMoved++;
