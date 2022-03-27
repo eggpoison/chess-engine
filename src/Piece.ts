@@ -14,7 +14,6 @@ class Piece {
    public readonly type: PieceTypes;
 
    public square: number;
-   public timesMoved: number = 0;
 
    constructor(type: PieceTypes, colour: PlayerColours, square: number) {
       this.type = type;

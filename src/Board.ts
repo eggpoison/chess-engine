@@ -1,30 +1,52 @@
 import { generatePieceMoves, PlayerColours } from "./computer-ai";
-import Piece from "./Piece";
+import Move, { MoveFlags } from "./Move";
+import Piece, { PieceTypes } from "./Piece";
 
 interface AttackedSquares {
    [key: number]: Array<Piece>;
 }
 
+export enum CastlingIndexes {
+   "K" = 8,
+   "Q" = 4,
+   "k" = 2,
+   "q" = 1
+}
+
 class Board {
    public squares: Array<Piece | null>;
 
-   public whiteAttackedSquares: AttackedSquares;
-   public blackAttackedSquares: AttackedSquares;
+   public attackedSquares: [AttackedSquares, AttackedSquares] = [[], []];
 
-   constructor(squares: Array<Piece | null>, whiteAttackedSquares?: AttackedSquares, blackAttackedSquares?: AttackedSquares) {
+   public currentPlayer: PlayerColours;
+   public castlingRights: number;
+
+   // Stores the last captured piece of each colour
+   // So the white lastCapturedPiece stores the last captured white piece
+   private lastCapturedPiece: [Piece | null, Piece | null] = [null, null];
+
+   constructor(squares: Array<Piece | null>, currentPlayer: PlayerColours, castlingRights: number) {
       this.squares = squares;
+      this.currentPlayer = currentPlayer;
+      this.castlingRights = castlingRights;
 
-      if (typeof whiteAttackedSquares !== "undefined") {
-         this.whiteAttackedSquares = whiteAttackedSquares;
-      } else {
-         this.whiteAttackedSquares = Board.calculateAttackedSquares(this, PlayerColours.White);
-      }
+      this.attackedSquares[PlayerColours.White] = Board.calculateAttackedSquares(this, PlayerColours.White);
+      this.attackedSquares[PlayerColours.Black] = Board.calculateAttackedSquares(this, PlayerColours.Black);
+   }
 
-      if (typeof blackAttackedSquares !== "undefined") {
-         this.blackAttackedSquares = blackAttackedSquares;
-      } else {
-         this.blackAttackedSquares = Board.calculateAttackedSquares(this, PlayerColours.Black);
+   static generateCastlingRights(rawData: string): number {
+      let castlingRights = 0;
+      for (const char of rawData.split("")) {
+         const val = CastlingIndexes[char as keyof typeof CastlingIndexes];
+         castlingRights += val;
       }
+      return castlingRights;
+   }
+
+   public canCastle(char: keyof typeof CastlingIndexes): boolean {
+      const val = CastlingIndexes[char];
+
+      return (this.castlingRights & val) === val;
    }
 
    /**
@@ -50,6 +72,140 @@ class Board {
       }
 
       return attackedSquares;
+   }
+
+   private updateCastlingRights(piece: Piece, type: "add" | "remove"): void {
+      const colour = piece.colour;
+
+      let castleIndexes: Array<keyof typeof CastlingIndexes> = new Array<keyof typeof CastlingIndexes>();
+      if (piece.type === PieceTypes.King) {
+         castleIndexes = ["k", "q"];
+      } else {
+         // Check if the rook is kingside or queenside
+         if (piece.square % 8 === 0) {
+            // Kingside
+            castleIndexes = ["k"];
+         } else {
+            // Queenside
+            castleIndexes = ["q"]
+         }
+      }
+
+      if (colour === PlayerColours.White) {
+         castleIndexes = castleIndexes.map(index => index.toUpperCase() as keyof typeof CastlingIndexes);
+      }
+
+      for (const index of castleIndexes) {
+         const rights = CastlingIndexes[index];
+         const canCastle = this.canCastle(index);
+
+         if (canCastle && type === "remove") {
+            this.castlingRights -= rights;
+         } else if (!canCastle && type === "add") {
+            this.castlingRights += rights;
+         }
+      }
+   }
+
+   makeMove(move: Move): void {
+      const movingPiece = this.squares[move.startSquare]!;
+
+      // If the piece is a king or a rook, remove the possibility to castle
+      if (movingPiece.type === PieceTypes.King || movingPiece.type === PieceTypes.Rook) {
+         this.updateCastlingRights(movingPiece, "remove");
+      }
+
+      // Update the captured piece
+      const opposingColour = +!movingPiece.colour;
+      const targetPiece = this.squares[move.targetSquare];
+      if (targetPiece !== null) {
+         this.lastCapturedPiece[opposingColour] = targetPiece;
+      } else {
+         this.lastCapturedPiece[opposingColour] = null;
+      }
+
+      // Move the piece from its previous position to its new one
+      this.squares[move.startSquare] = null;
+      this.squares[move.targetSquare] = movingPiece;
+   
+      switch (move.flags) {
+         // Castling
+         case MoveFlags.IsCastling: {
+            let rookStartSquare!: number;
+            let rookTargetSquare!: number;
+   
+            if (move.targetSquare % 8 === 6) {
+               // Kingside castle
+               rookStartSquare = move.startSquare + 3;
+               rookTargetSquare = move.startSquare + 1;
+            } else {
+               // Queenside castle
+               rookStartSquare = move.startSquare - 4;
+               rookTargetSquare = move.startSquare - 1;
+            }
+   
+            // Move the rook behind the king
+            const rook = this.squares[rookStartSquare]!;
+            rook.square = rookTargetSquare;
+            this.squares[rookStartSquare] = null;
+            this.squares[rookTargetSquare] = rook;
+   
+            break;
+         }
+      }
+   
+      movingPiece.square = move.targetSquare;
+   
+      // Recalculate attacked squares
+      this.attackedSquares[movingPiece.colour] = Board.calculateAttackedSquares(this, movingPiece.colour);
+   }
+
+   unmakeMove(move: Move): void {
+      const movedPiece = this.squares[move.targetSquare]!
+
+      // If the piece is a king or a rook, remove the possibility to castle
+      if (movedPiece.type === PieceTypes.King || movedPiece.type === PieceTypes.Rook) {
+         this.updateCastlingRights(movedPiece, "add");
+      }
+
+      const opposingColour = +!movedPiece.colour;
+      const capturedPiece = this.lastCapturedPiece[opposingColour];
+
+      // Move the piece from its current position to its previous one
+      this.squares[move.startSquare] = movedPiece;
+      this.squares[move.targetSquare] = capturedPiece;
+   
+      switch (move.flags) {
+         case MoveFlags.IsCastling: {
+            // Undo castling
+
+            let rookStartSquare!: number;
+            let rookTargetSquare!: number;
+   
+            if (move.targetSquare % 8 === 6) {
+               // Kingside castle
+               rookStartSquare = move.startSquare + 1;
+               rookTargetSquare = move.startSquare + 3;
+            } else {
+               // Queenside castle
+               rookStartSquare = move.startSquare - 1;
+               rookTargetSquare = move.startSquare - 4;
+            }
+   
+            // Move the rook back
+            const rook = this.squares[rookStartSquare]!;
+            rook.square = rookTargetSquare;
+            this.squares[rookStartSquare] = null;
+            this.squares[rookTargetSquare] = rook;
+   
+            break;
+         }
+      }
+   
+      movedPiece.square = move.startSquare;
+   
+      // Recalculate attacked squares
+      this.attackedSquares[movedPiece.colour] = Board.calculateAttackedSquares(this, movedPiece.colour);
    }
 }
 

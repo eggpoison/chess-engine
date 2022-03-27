@@ -1,4 +1,4 @@
-import Board from "./Board";
+import Board, { CastlingIndexes } from "./Board";
 import Move, { MoveFlags } from "./Move";
 import Piece, { PieceTypes } from "./Piece";
 
@@ -53,12 +53,10 @@ const FEN_PIECE_REFERENCES: { [key: string]: PieceTypes } = {
 }
 
 export function generateBoardFromFen(fen: string): Board {
-   const squares = new Array<Piece | null>(64);
-   
    const fields = fen.split(" ");
-
+   
+   const squares = new Array<Piece | null>(64);
    const ranks = fields[0].split("/");
-   console.log(ranks);
    for (let i = 0; i < 8; i++) {
       const rank = ranks[i];
 
@@ -91,8 +89,11 @@ export function generateBoardFromFen(fen: string): Board {
       }
    }
 
-   const board = new Board(squares);
-   console.log(board);
+   const activeColour = fields[1] === "w" ? PlayerColours.White : PlayerColours.Black;
+
+   const castlingRights = fields[2] === "-" ? 0 : Board.generateCastlingRights(fields[2]);
+
+   const board = new Board(squares, activeColour, castlingRights);
    return board;
 }
 
@@ -100,63 +101,6 @@ export function setup(): void {
    precomputeMoveData();
 }
 setup();
-
-export function applyMove(board: Board, move: Move): Board {
-   move.piece.timesMoved++;
-   
-   // Make the new position
-   const newBoard = new Board(board.squares, board.whiteAttackedSquares, board.blackAttackedSquares);
-
-   switch (move.flags) {
-      case MoveFlags.None: {
-         // Move the piece from its previous position to its new one
-         newBoard.squares[move.piece.square] = null;
-         newBoard.squares[move.targetSquare] = move.piece;
-
-         break;
-      }
-
-      case MoveFlags.IsCastling: {
-         let rookStartSquare!: number;
-         let rookTargetSquare!: number;
-
-         if (move.targetSquare % 8 === 6) {
-            // Kingside castle
-
-            rookStartSquare = move.piece.square + 3;
-            rookTargetSquare = move.targetSquare - 1;
-         } else {
-            // Queenside castle
-
-            rookStartSquare = move.piece.square - 4;
-            rookTargetSquare = move.targetSquare + 1;
-         }
-
-         // Move the rook behind the king
-         const rook = newBoard.squares[rookStartSquare];
-         newBoard.squares[rookStartSquare] = null;
-         newBoard.squares[rookTargetSquare] = rook;
-
-         // Move the king
-         const king = newBoard.squares[move.piece.square];
-         newBoard.squares[move.piece.square] = null;
-         newBoard.squares[move.targetSquare] = king;
-
-         break;
-      }
-   }
-
-   move.piece.square = move.targetSquare;
-
-   // Recalculate attacked squares
-   if (move.piece.colour === PlayerColours.White) {
-      newBoard.whiteAttackedSquares = Board.calculateAttackedSquares(newBoard, PlayerColours.White);
-   } else {
-      newBoard.blackAttackedSquares = Board.calculateAttackedSquares(newBoard, PlayerColours.Black);
-   }
-
-   return newBoard;
-}
 
 const generateSlidingMoves = (board: Board, piece: Piece, allowOwnColour: boolean): Array<Move> => {
    const startDirectionIndex = piece.type === PieceTypes.Bishop ? 4 : 0;
@@ -173,14 +117,14 @@ const generateSlidingMoves = (board: Board, piece: Piece, allowOwnColour: boolea
          // Move is blocked by a friendly piece, so can't move any further
          if (targetPiece !== null && targetPiece.colour === piece.colour) {
             if (allowOwnColour) {
-               const move = new Move(piece, targetSquare);
+               const move = new Move(piece.square, targetSquare);
                moves.push(move);
             }
 
             break;
          }
 
-         const move = new Move(piece, targetSquare);
+         const move = new Move(piece.square, targetSquare);
          moves.push(move);
 
          // Captures enemy piece so can't move any further
@@ -194,11 +138,11 @@ const generateSlidingMoves = (board: Board, piece: Piece, allowOwnColour: boolea
 }
 
 const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean): Array<Move> => {
-   const legalMoves = new Array<Move>();
+   const moves = new Array<Move>();
 
    const addRegularMove = (targetSquare: number): void => {
-      const move = new Move(piece, targetSquare);
-      legalMoves.push(move);
+      const move = new Move(piece.square, targetSquare);
+      moves.push(move);
    }
 
    switch (piece.type) {
@@ -219,40 +163,52 @@ const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean):
             }
          }
 
-         // If the king hasn't moved, try to castle
-         if (piece.timesMoved === 0) {
-            const rookSquareOffsets = [3, -4];
-            const kingTargetSquareOffsets = [2, -2];
+         
+         // Try to castle
+         const rookSquareOffsets = [3, -4];
+         const kingTargetSquareOffsets = [2, -2];
+         
+         for (let i = 0; i < 2; i++) {
+            // Check if castling is possible
+            let castlingIndex = i === 0 ? "k" : "q";
+            if (piece.colour === 1) castlingIndex = castlingIndex.toUpperCase();
 
-            for (let i = 0; i < 2; i++) {
-               const rookSquareOffset = rookSquareOffsets[i];
-               const kingTargetSquareOffset = kingTargetSquareOffsets[i];
+            const canCastle = board.canCastle(castlingIndex as keyof typeof CastlingIndexes);
+            if (!canCastle) continue;
 
-               const rook = board.squares[piece.square + rookSquareOffset];
-               
-               // If the square isn't a rook or the rook has already moved, isn't legal move
-               if (rook === null || rook.type !== PieceTypes.Rook || rook.timesMoved !== 0) {
-                  continue;
-               }
+            const rookSquareOffset = rookSquareOffsets[i];
+            const kingTargetSquareOffset = kingTargetSquareOffsets[i];
 
-               // Make sure there are no pieces to interfere with castling
-               let pieceIsInWay = false;
-               const direction = Math.sign(rookSquareOffset);
-               for (let j = 0; j < Math.abs(rookSquareOffset) - 1; j++) {
-                  const square = piece.square + (j + 1) * direction;
-
-                  // If there is a piece in the way, don't castle
-                  const queryPiece = board.squares[square];
-                  if (queryPiece !== null) {
-                     pieceIsInWay = true;
-                     break;
-                  }
-               }
-               if (pieceIsInWay) continue;
-
-               const move = new Move(piece, piece.square + kingTargetSquareOffset, MoveFlags.IsCastling);
-               legalMoves.push(move);
+            const rook = board.squares[piece.square + rookSquareOffset];
+            
+            // If the square isn't a rook or the rook has already moved, isn't legal move
+            if (typeof rook === "undefined") {
+               console.log("Castling rights:", board.castlingRights);
+               console.log("Castling index:", castlingIndex);
+               console.log("King square:", piece.square);
+               console.log("Rook square:", piece.square + rookSquareOffset);
             }
+            if (rook === null || rook.type !== PieceTypes.Rook) {
+               continue;
+            }
+
+            // Make sure there are no pieces to interfere with castling
+            let pieceIsInWay = false;
+            const direction = Math.sign(rookSquareOffset);
+            for (let j = 0; j < Math.abs(rookSquareOffset) - 1; j++) {
+               const square = piece.square + (j + 1) * direction;
+
+               // If there is a piece in the way, don't castle
+               const queryPiece = board.squares[square];
+               if (queryPiece !== null) {
+                  pieceIsInWay = true;
+                  break;
+               }
+            }
+            if (pieceIsInWay) continue;
+
+            const move = new Move(piece.square, piece.square + kingTargetSquareOffset, MoveFlags.IsCastling);
+            moves.push(move);
          }
 
          break;
@@ -295,8 +251,23 @@ const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean):
 
          // Double move
          if (!allowOwnColour && Math.floor(piece.square / 8) === (piece.colour === PlayerColours.White ? 6 : 1)) {
-            const targetSquare = piece.square + (piece.colour === PlayerColours.White ? -16 : 16);
-            addRegularMove(targetSquare);
+            // Make sure the pawn doesn't pass through any pieces
+            let moveIsAllowed = true;
+            const direction = piece.colour === PlayerColours.White ? -8 : 8;
+            for (let i = 0; i < 2; i++) {
+               const square = piece.square + (i + 1) * direction;
+
+               // If it does, cancel the move
+               if (board.squares[square] !== null) {
+                  moveIsAllowed = false;
+                  break;
+               }
+            }
+
+            if (moveIsAllowed) {
+               const targetSquare = piece.square + (piece.colour === PlayerColours.White ? -16 : 16);
+               addRegularMove(targetSquare);
+            }
          }
 
          // Capture moves
@@ -318,7 +289,7 @@ const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean):
       }
    }
 
-   return legalMoves;
+   return moves;
 }
 
 /**
@@ -337,7 +308,7 @@ export function generatePieceMoves(board: Board, piece: Piece, allowOwnColour: b
    }
 }
 
-const generateAllPossibleMoves = (board: Board, colour: PlayerColours): Array<Move> => {
+const generatePseudoLegalMoves = (board: Board, colour: PlayerColours): Array<Move> => {
    let moves = new Array<Move>();
    for (let square = 0; square < 64; square++) {
       const piece = board.squares[square];
@@ -350,9 +321,56 @@ const generateAllPossibleMoves = (board: Board, colour: PlayerColours): Array<Mo
    return moves;
 }
 
-export function generateComputerMove(board: Board): Move {
-   const moves: Array<Move> = generateAllPossibleMoves(board, PlayerColours.Black);
+export function validatePseudoLegalMoves(board: Board, pseudoLegalMoves: Array<Move>, colour: PlayerColours): Array<Move> {
+   const legalMoves = new Array<Move>();
 
+   const opponentColour = colour ? 0 : 1;
+   for (const moveToVerify of pseudoLegalMoves) {
+
+      // Generate all possible responses to the move
+      board.makeMove(moveToVerify);
+      const opponentResponses: Array<Move> = generatePseudoLegalMoves(board, opponentColour);
+      
+      // Find my king
+      // This has to be done during the loop as the king may move
+      let kingSquare!: number;
+      for (let square = 0; square < 64; square++) {
+         const piece = board.squares[square];
+         if (piece !== null && piece.type === PieceTypes.King && piece.colour === colour) {
+            kingSquare = square;
+            break;
+         }
+      }
+      if (typeof kingSquare === "undefined") {
+         throw new Error("You have no king!");
+      }
+
+      if (opponentResponses.some(move => move.targetSquare === kingSquare)) {
+         // The opponent captured my king, my move must have been illegal
+      } else {
+         legalMoves.push(moveToVerify);
+      }
+
+      board.unmakeMove(moveToVerify);
+   }
+
+   return legalMoves;
+}
+
+/**
+ * Generates all possible legal moves for a player to make
+ * @param board The board
+ * @param colour The colour of the player to generate moves for
+ */
+const generateLegalMoves = (board: Board, colour: PlayerColours): Array<Move> => {
+   const pseudoLegalMoves: Array<Move> = generatePseudoLegalMoves(board, colour);
+   const legalMoves: Array<Move> = validatePseudoLegalMoves(board, pseudoLegalMoves, colour);
+   return legalMoves;
+}
+
+export function generateComputerMove(board: Board): Move {
+   const moves: Array<Move> = generateLegalMoves(board, PlayerColours.Black);
+   
    const randomMove = moves[Math.floor(Math.random() * moves.length)];
    return randomMove;
 }

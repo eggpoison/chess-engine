@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AudioFromFile from "../AudioFromFile";
 import Board from "../Board";
-import { applyMove, generateBoardFromFen, generateComputerMove, generatePieceMoves, PlayerColours } from "../computer-ai";
+import { generateBoardFromFen, generateComputerMove, generatePieceMoves, PlayerColours, validatePseudoLegalMoves } from "../computer-ai";
 import "../css/board.css";
 import Move, { MoveFlags } from "../Move";
 import Piece, { PieceTypes } from "../Piece";
@@ -17,9 +17,44 @@ const getIconOffset = (piece: Piece): [number, number] => {
    return [x, y];
 }
 
-let currentPlayer = 1;
 
+let colouredBoardSquareIndexes = new Array<number>();
 const boardSquares = new Array<HTMLElement>(64);
+
+type BoardSquareColourType = "Potential move" | "Piece previous position";
+export function colourBoardSquare(square: number, colourType: BoardSquareColourType): void {
+   const boardSquare = boardSquares[square];
+   
+   switch (colourType) {
+      case "Potential move": {
+         boardSquare.classList.add("legal-move");
+         break;
+      }
+      case "Piece previous position": {
+         boardSquare.classList.add("previous-move");
+         break;
+      }
+   }
+
+   colouredBoardSquareIndexes.push(square);
+}
+export function uncolourBoardSquare(square: number): void {
+   const potentialClassNames: ReadonlyArray<string> = ["legal-move", "previous-move"];
+
+   const boardSquare = boardSquares[square];
+   for (const className of potentialClassNames) {
+      boardSquare.classList.remove(className);
+   }
+
+   colouredBoardSquareIndexes.splice(colouredBoardSquareIndexes.indexOf(square), 1); 
+}
+
+const clearBoardSquareColours = (): void => {
+   const squareIndexesToClear = colouredBoardSquareIndexes.slice();
+   for (const square of squareIndexesToClear) {
+      uncolourBoardSquare(square);
+   }
+}
 
 interface PieceIconProps {
    piece: Piece;
@@ -27,7 +62,7 @@ interface PieceIconProps {
 }
 const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
    const elemRef = useRef<HTMLDivElement>(null);
-   const legalMoves = useRef<Array<Move> | null>(null);
+   const moves = useRef<Array<Move> | null>(null);
 
    const [xOffset, yOffset] = getIconOffset(piece);
    const style: React.CSSProperties = {
@@ -37,29 +72,46 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
 
    const startMove = (): void => {
       // Generate legal moves
-      legalMoves.current = generatePieceMoves(gameBoard, piece);
+      const pseudoLegalMoves = generatePieceMoves(gameBoard, piece);
+      const legalMoves = validatePseudoLegalMoves(gameBoard, pseudoLegalMoves, piece.colour);
+      moves.current = legalMoves;
 
-      // Colour squares with legal moves red
-      for (const legalMove of legalMoves.current) {
-         const square = boardSquares[legalMove.targetSquare];
-
-         square.classList.add("legal-move");
+      // Colour squares with legal moves
+      for (const legalMove of moves.current) {
+         colourBoardSquare(legalMove.targetSquare, "Potential move");
       }
 
       const elem = elemRef.current!;
       elem.classList.add("dragging");
    }
 
+   const mouseMove = useCallback((): void => {
+      const event = window.event as MouseEvent;
+
+      const x = event.clientX;
+      const y = event.clientY;
+
+      if (elemRef.current === null) {
+         console.log(piece);
+         console.log(elemRef.current);
+         console.trace();
+      }
+      const boardBounds = document.getElementById("board")!.getBoundingClientRect();
+      const pieceBounds = elemRef.current!.getBoundingClientRect();
+
+      const elem = elemRef.current!;
+      elem.style.left = x - boardBounds.x - pieceBounds.width/2 + "px";
+      elem.style.top = y - boardBounds.y - pieceBounds.height/2 + "px";
+   }, [piece]);
+
    const mouseUp = useCallback((): void => {
       const startX = piece.square % 8;
       const startY = Math.floor(piece.square / 8);
 
-      const uncolourLegalMoves = (): void => {
+      const uncolourMoves = (): void => {
          // Uncolour the squares with legal moves
-         for (const legalMove of legalMoves.current!) {
-            const square = boardSquares[legalMove.targetSquare];
-
-            square.classList.remove("legal-move");
+         for (const move of moves.current!) {
+            uncolourBoardSquare(move.targetSquare);
          }
       }
 
@@ -74,7 +126,7 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
 
          elem.classList.remove("dragging");
 
-         uncolourLegalMoves();
+         uncolourMoves();
       };
 
       const event = window.event as MouseEvent;
@@ -98,7 +150,7 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
       }
 
       let moveIsValid = false;
-      for (const move of legalMoves.current!) {
+      for (const move of moves.current!) {
          if (move.targetSquare === targetSquare) {
             moveIsValid = true;
             break;
@@ -112,7 +164,7 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
       if (cellX >= 0 && cellX < 8 && cellY >= 0 && cellY < 8) {
          // Get the move
          let move!: Move;
-         for (const currentMove of legalMoves.current!) {
+         for (const currentMove of moves.current!) {
             if (currentMove.targetSquare === targetSquare) {
                move = currentMove;
                break;
@@ -125,28 +177,14 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
          document.removeEventListener("mouseup", mouseUp);
          document.removeEventListener("mousemove", mouseMove);
 
-         uncolourLegalMoves();
+         // uncolourMoves();
       } else {
          cancelMove();
       }
-   }, [movePiece, piece.square]);
-
-   const mouseMove = (): void => {
-      const event = window.event as MouseEvent;
-
-      const x = event.clientX;
-      const y = event.clientY;
-
-      const boardBounds = document.getElementById("board")!.getBoundingClientRect();
-      const pieceBounds = elemRef.current!.getBoundingClientRect();
-
-      const elem = elemRef.current!;
-      elem.style.left = x - boardBounds.x - pieceBounds.width/2 + "px";
-      elem.style.top = y - boardBounds.y - pieceBounds.height/2 + "px";
-   }
+   }, [movePiece, piece.square, mouseMove]);
 
    const mouseDown = (): void => {
-      const canMove = currentPlayer === PlayerColours.White;
+      const canMove = gameBoard.currentPlayer === PlayerColours.White;
       if (!canMove) return;
 
       document.addEventListener("mousemove", mouseMove);
@@ -160,7 +198,7 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
          document.removeEventListener("mousemove", mouseMove);
          document.removeEventListener("mouseup", mouseUp);
       }
-   }, [mouseUp]);
+   }, [mouseUp, mouseMove]);
 
    return <div ref={elemRef} onMouseDown={piece.colour === PlayerColours.White ? mouseDown : undefined} style={style} className="icon"></div>;
 }
@@ -202,57 +240,95 @@ const Square = ({ squareIndex, piece, movePiece }: SquareProps) => {
 }
 
 export const BoardElem = () => {
-   const [currentPlayer, setCurrentPlayer] = useState<PlayerColours>(PlayerColours.White);
+   const [, setValue] = useState(0);
+
+   const updateBoard = useCallback(() => {
+      setValue(value => value + 1);
+   }, []);
 
    // useEffect(() => {
+   //    const colour = PlayerColours.White;
+
    //    for (let i = 0; i < 64; i++) {
    //       const squareElem = boardSquares[i];
-   //       if (gameBoard.whiteAttackedSquares.hasOwnProperty(i)) {
+   //       if (gameBoard.attackedSquares[colour].hasOwnProperty(i)) {
    //          squareElem.style.backgroundColor = "blue";
    //       } else {
    //          squareElem.style.backgroundColor = "red";
    //       }
    //    }
-   // }, [currentPlayer]);
+   // }, [value]);
 
    const movePiece = useCallback((move: Move): void => {
-      move.piece.timesMoved++;
-
-      // Play move sound
-      switch (move.flags) {
-         case MoveFlags.None: {
-            const targetPiece = gameBoard.squares[move.targetSquare];
-            if (targetPiece !== null) {
-               // If a piece has been captured
-               new AudioFromFile("capture.mp3");
-            } else {
-               new AudioFromFile("move.mp3");
-            }
-
-            break;
-         }
-         case MoveFlags.IsCastling: {
-            new AudioFromFile("castling.mp3");
-
-            break;
-         }
+      const makeComputerMove = (): void => {
+         setTimeout(() => {
+            const computerMove = generateComputerMove(gameBoard);
+            movePiece(computerMove);
+         }, Math.random() * 200 + 200);
       }
+
+      // Uncolour previously coloured board squares
+      clearBoardSquareColours();
+
+      // Colour the board squares
+      colourBoardSquare(move.startSquare, "Piece previous position");
+      colourBoardSquare(move.targetSquare, "Piece previous position");
+
+      const colour = gameBoard.squares[move.startSquare]!.colour;
+      const targetPiece = gameBoard.squares[move.targetSquare];
 
       // Make the new position
-      const newBoard = applyMove(gameBoard, move);
-      gameBoard = newBoard;
+      gameBoard.makeMove(move);
+
+      if (colour === PlayerColours.White) {
+         console.log(gameBoard.castlingRights.toString(2));
+      }
+
+      let enemyKingSquare!: number;
+      for (let square = 0; square < 64; square++) {
+         const piece = gameBoard.squares[square];
+         if (piece !== null && piece.type === PieceTypes.King && piece.colour !== colour) {
+            enemyKingSquare = square;
+            break;
+         }
+      }
+
+      const attackedSquares = gameBoard.attackedSquares[colour];
+      const hasCheckedEnemyKing = attackedSquares.hasOwnProperty(enemyKingSquare);
+
+      // Play move sound
+      if (hasCheckedEnemyKing) {
+         new AudioFromFile("check.mp3");
+      } else {
+         switch (move.flags) {
+            case MoveFlags.None: {
+               if (targetPiece !== null) {
+                  // If a piece has been captured
+                  new AudioFromFile("capture.mp3");
+               } else {
+                  new AudioFromFile("move.mp3");
+               }
+               
+               break;
+            }
+            case MoveFlags.IsCastling: {
+               new AudioFromFile("castling.mp3");
+               
+               break;
+            }
+         }
+      }
 
       // Switch current player
-      const newCurrentPlayer = (currentPlayer + 1) % 2 as 0 | 1;
-      setCurrentPlayer(newCurrentPlayer);
-   }, [currentPlayer]);
+      const newCurrentPlayer = +!gameBoard.currentPlayer;
+      gameBoard.currentPlayer = newCurrentPlayer;
+      updateBoard();
 
-   useEffect(() => {
-      if (currentPlayer === 0) {
-         const computerMove = generateComputerMove(gameBoard);
-         movePiece(computerMove);
+      // If the computer is the current player, make its move
+      if (gameBoard.currentPlayer === PlayerColours.Black) {
+         makeComputerMove();
       }
-   }, [currentPlayer, movePiece]);
+   }, [updateBoard]);
 
    const content = new Array<JSX.Element>();
    for (let i = 0; i < 8; i++) {
@@ -273,7 +349,7 @@ export const BoardElem = () => {
    }
 
    return <>
-      <h1 id="current-player">{currentPlayer === PlayerColours.White ? "White To Move" : "Black To Move"}</h1>
+      <h1 id="current-player">{gameBoard.currentPlayer === PlayerColours.White ? "White To Move" : "Black To Move"}</h1>
 
       <div id="board">
          {content}

@@ -20,16 +20,19 @@
    -webkit-user-drag: none;
 }
 #board .square.square-1 {
-   background-color: rgb(245, 230, 166);
+   background-color: rgb(247, 229, 195);
 }
 #board .square.square-2 {
-   background-color: rgb(105, 60, 0);
+   background-color: rgb(160, 101, 53);
 }
 #board .square.square-1.legal-move {
    background-color: rgb(243, 73, 96);
 }
 #board .square.square-2.legal-move {
    background-color: rgb(180, 0, 0);
+}
+#board .square.previous-move {
+   background-color: rgb(216, 201, 67);
 }
 #board .square .icon {
    --icon-size: 60px;

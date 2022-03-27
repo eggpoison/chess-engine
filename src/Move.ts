@@ -1,5 +1,3 @@
-import Piece from "./Piece";
-
 export enum MoveFlags {
    None,
    IsCastling,
@@ -9,11 +7,11 @@ export enum MoveFlags {
 class Move {
    public flags: MoveFlags;
 
-   public piece: Piece;
+   public startSquare: number;
    public targetSquare: number;
 
-   constructor(piece: Piece, targetSquare: number, flags?: MoveFlags) {
-      this.piece = piece;
+   constructor(startSquare: number, targetSquare: number, flags?: MoveFlags) {
+      this.startSquare = startSquare;
       this.targetSquare = targetSquare;
 
       if (typeof flags !== "undefined") {
