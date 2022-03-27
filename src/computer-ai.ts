@@ -97,10 +97,7 @@ export function generateBoardFromFen(fen: string): Board {
    return board;
 }
 
-export function setup(): void {
-   precomputeMoveData();
-}
-setup();
+precomputeMoveData();
 
 const generateSlidingMoves = (board: Board, piece: Piece, allowOwnColour: boolean): Array<Move> => {
    const startDirectionIndex = piece.type === PieceTypes.Bishop ? 4 : 0;
@@ -163,7 +160,6 @@ const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean):
             }
          }
 
-         
          // Try to castle
          const rookSquareOffsets = [3, -4];
          const kingTargetSquareOffsets = [2, -2];
