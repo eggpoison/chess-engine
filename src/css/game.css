@@ -7,6 +7,17 @@
    transform: translate(-50%, -50%);
    box-shadow: 0 0 0 4px #fff, 0 0 5px 8px #aaa;
 }
+#board.game-ended {
+   animation: EndGame 0.2s ease-in-out forwards;
+}
+@keyframes EndGame {
+   0% {
+      filter: brightness(100%) grayscale(0%);
+   }
+   100% {
+      filter: brightness(60%) grayscale(20%);
+   }
+}
 
 #board .row {
    height: var(--cell-size);
@@ -49,4 +60,24 @@
 }
 #board .square .icon.dragging {
    z-index: 2;
+}
+
+#current-player {
+  font-size: 2.5rem;
+  width: 100%;
+  color: #fff;
+  text-align: center;
+  margin: 0;
+  position: absolute;
+  top: 2rem;
+}
+
+#game-end-message {
+   font-size: 2.25rem;
+   color: #fff;
+   position: absolute;
+   top: 50%;
+   left: 50%;
+   transform: translate(-50%, -50%);
+   user-select: none;
 }

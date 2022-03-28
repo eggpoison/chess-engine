@@ -1,0 +1,16 @@
+#menu {
+   position: absolute;
+   top: 50%;
+   left: 50%;
+   transform: translate(-50%, -50%);
+   display: flex;
+}
+#menu .player-container {
+   background-color: #eee;
+   border-radius: 5px;
+   padding: 5px;
+   margin: 5px;
+}
+#menu p {
+   margin: 0;
+}

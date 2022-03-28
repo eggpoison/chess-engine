@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AudioFromFile from "../AudioFromFile";
-import Board from "../Board";
+import Board, { GameResults } from "../Board";
 import { generateBoardFromFen, generateComputerMove, generatePieceMoves, PlayerColours, validatePseudoLegalMoves } from "../computer-ai";
-import "../css/board.css";
 import Move, { MoveFlags } from "../Move";
 import Piece, { PieceTypes } from "../Piece";
 import SETTINGS from "../settings";
 
 const startingPositionFenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"; 
+// const startingPositionFenString = "8/8/8/7k/5P2/6PP/1PPPPPPP/RNBQKBNR w KQkq - 0 1"; 
+// const startingPositionFenString = "rnbqkbnr/pppppppp/8/8/2B5/5Q2/PPPPPPPP/RNBQKBNR w KQkq - 0 1"; 
 export let gameBoard: Board = generateBoardFromFen(startingPositionFenString);
 
 const getIconOffset = (piece: Piece): [number, number] => {
@@ -239,14 +240,18 @@ const Square = ({ squareIndex, piece, movePiece }: SquareProps) => {
    </div>;
 }
 
-export const BoardElem = () => {
-   const [, setValue] = useState(0);
+export const Game = () => {
+   // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   const [value, setValue] = useState(0);
+   const gameResult = useRef<GameResults>(GameResults.None);
+   const boardRef = useRef<HTMLDivElement | null>(null);
 
    const updateBoard = useCallback(() => {
       setValue(value => value + 1);
    }, []);
 
    // useEffect(() => {
+   //    console.log("rem");
    //    const colour = PlayerColours.White;
 
    //    for (let i = 0; i < 64; i++) {
@@ -258,6 +263,26 @@ export const BoardElem = () => {
    //       }
    //    }
    // }, [value]);
+
+   const endGame = (winningColour: PlayerColours | null): void => {
+      const board = boardRef.current!;
+      board.classList.add("game-ended");
+
+      switch (winningColour) {
+         case null: {
+            gameResult.current! = GameResults.Stalemate;
+            break;
+         }
+         case PlayerColours.White: {
+            gameResult.current! = GameResults.WhiteWin;
+            break;
+         }
+         case PlayerColours.Black: {
+            gameResult.current! = GameResults.BlackWin;
+            break;
+         }
+      }
+   }
 
    const movePiece = useCallback((move: Move): void => {
       const makeComputerMove = (): void => {
@@ -289,11 +314,17 @@ export const BoardElem = () => {
          }
       }
 
+      // Check if the move checkmated the enemy
+      const enemyColour = colour ? 0 : 1;
+      const isCheckmate = gameBoard.isCheckmate(enemyColour);
+
       const attackedSquares = gameBoard.attackedSquares[colour];
       const hasCheckedEnemyKing = attackedSquares.hasOwnProperty(enemyKingSquare);
 
-      // Play move sound
-      if (hasCheckedEnemyKing) {
+      if (isCheckmate) {
+         endGame(colour);
+         new AudioFromFile("win.mp3");
+      } else if (hasCheckedEnemyKing) {
          new AudioFromFile("check.mp3");
       } else {
          switch (move.flags) {
@@ -316,12 +347,12 @@ export const BoardElem = () => {
       }
 
       // Switch current player
-      const newCurrentPlayer = +!gameBoard.currentPlayer;
+      const newCurrentPlayer = gameBoard.currentPlayer ? 0 : 1;
       gameBoard.currentPlayer = newCurrentPlayer;
       updateBoard();
 
       // If the computer is the current player, make its move
-      if (gameBoard.currentPlayer === PlayerColours.Black) {
+      if (!gameResult.current && gameBoard.currentPlayer === PlayerColours.Black) {
          makeComputerMove();
       }
    }, [updateBoard]);
@@ -345,10 +376,14 @@ export const BoardElem = () => {
    }
 
    return <>
-      <h1 id="current-player">{gameBoard.currentPlayer === PlayerColours.White ? "White To Move" : "Black To Move"}</h1>
-
-      <div id="board">
+      <div id="board" ref={boardRef}>
          {content}
       </div>
+
+      {gameResult.current === GameResults.None ? (
+         <h1 id="current-player">{gameBoard.currentPlayer === PlayerColours.White ? "White To Move" : "Black To Move"}</h1>
+      ) : (
+         <h1 id="game-end-message">{gameResult.current === GameResults.Stalemate ? "Stalemate" : gameResult.current === GameResults.WhiteWin ? "White wins!" : "Black wins!"}</h1>
+      )}
    </>;
 }

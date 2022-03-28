@@ -1,4 +1,4 @@
-import { generatePieceMoves, PlayerColours } from "./computer-ai";
+import { generateLegalMoves, generatePieceMoves, PlayerColours } from "./computer-ai";
 import Move, { MoveFlags } from "./Move";
 import Piece, { PieceTypes } from "./Piece";
 
@@ -11,6 +11,13 @@ export enum CastlingIndexes {
    "Q" = 4,
    "k" = 2,
    "q" = 1
+}
+
+export enum GameResults {
+   None,
+   Stalemate,
+   BlackWin,
+   WhiteWin,
 }
 
 class Board {
@@ -177,6 +184,11 @@ class Board {
    unmakeMove(move: Move, castlingRightsBeforeMove: number): void {
       const movedPiece = this.squares[move.targetSquare]!
 
+      if (movedPiece.type === PieceTypes.Pawn && Math.floor(move.targetSquare / 8) === 0) {
+         console.log(move);
+         console.log(this.squares.slice());
+      }
+
       // If the piece is a king or a rook, remove the possibility to castle
       if (movedPiece.type === PieceTypes.King || movedPiece.type === PieceTypes.Rook) {
          this.updateCastlingRights(move, "unmake", castlingRightsBeforeMove);
@@ -220,6 +232,28 @@ class Board {
    
       // Recalculate attacked squares
       this.attackedSquares[movedPiece.colour] = Board.calculateAttackedSquares(this, movedPiece.colour);
+   }
+
+   /**
+    * Checks if a player has been checkmated
+    * @param colour The colour of the player who will be checked if they are checkmated
+    */
+   public isCheckmate(colour: PlayerColours): boolean {
+      let kingSquare!: number;
+      for (let square = 0; square < 64; square++) {
+         const piece = this.squares[square];
+
+         if (piece !== null && piece.type === PieceTypes.King && piece.colour === colour) {
+            kingSquare = square;
+            break;
+         }
+      }
+      if (typeof kingSquare === "undefined") {
+         throw new Error("No king!");
+      }
+
+      const opponentResponses: Array<Move> = generateLegalMoves(this, colour);
+      return opponentResponses.length === 0;
    }
 }
 

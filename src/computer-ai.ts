@@ -270,6 +270,10 @@ const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean):
             const targetSquare = piece.square + 8 * direction + xOffset;
             const targetPiece = board.squares[targetSquare];
 
+            if (typeof targetPiece === "undefined") {
+               console.log(piece, piece.square);
+               console.log(targetSquare, targetPiece);
+            }
             if (allowOwnColour || (targetPiece !== null && targetPiece.colour !== piece.colour)) {
                addRegularMove(targetSquare);
             }
@@ -354,7 +358,7 @@ export function validatePseudoLegalMoves(board: Board, pseudoLegalMoves: Array<M
  * @param board The board
  * @param colour The colour of the player to generate moves for
  */
-const generateLegalMoves = (board: Board, colour: PlayerColours): Array<Move> => {
+export function generateLegalMoves(board: Board, colour: PlayerColours): Array<Move> {
    const pseudoLegalMoves: Array<Move> = generatePseudoLegalMoves(board, colour);
    const legalMoves: Array<Move> = validatePseudoLegalMoves(board, pseudoLegalMoves, colour);
    return legalMoves;
