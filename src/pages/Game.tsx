@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AudioFromFile from "../AudioFromFile";
 import Board, { GameResults } from "../Board";
-import { generateBoardFromFen, generateComputerMove, generatePieceMoves, PlayerColours, validatePseudoLegalMoves } from "../computer-ai";
+import { generateComputerMove, generatePieceMoves, PlayerColours, validatePseudoLegalMoves } from "../computer-ai";
+import { generateBoardFromFenString } from "../fen-strings";
 import Move, { MoveFlags } from "../Move";
 import Piece, { PieceTypes } from "../Piece";
 import SETTINGS from "../settings";
 
-const startingPositionFenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"; 
-// const startingPositionFenString = "8/8/8/7k/5P2/6PP/1PPPPPPP/RNBQKBNR w KQkq - 0 1"; 
-// const startingPositionFenString = "rnbqkbnr/pppppppp/8/8/2B5/5Q2/PPPPPPPP/RNBQKBNR w KQkq - 0 1"; 
-export let gameBoard: Board = generateBoardFromFen(startingPositionFenString);
+const startingPositionFenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+// const startingPositionFenString = "7k/8/P7/8/8/8/1PPPPPPP/RNBQKBNR w KQkq - 0 1";
+export let gameBoard: Board = generateBoardFromFenString(startingPositionFenString);
 
 const getIconOffset = (piece: Piece): [number, number] => {
    const x = piece.type;
@@ -74,7 +74,8 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
    const startMove = (): void => {
       // Generate legal moves
       const pseudoLegalMoves = generatePieceMoves(gameBoard, piece);
-      const legalMoves = validatePseudoLegalMoves(gameBoard, pseudoLegalMoves, piece.colour);
+      const legalMoves = validatePseudoLegalMoves(gameBoard, pseudoLegalMoves, piece.colour, true);
+
       moves.current = legalMoves;
 
       // Colour squares with legal moves
@@ -92,18 +93,13 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
       const x = event.clientX;
       const y = event.clientY;
 
-      if (elemRef.current === null) {
-         console.log(piece);
-         console.log(elemRef.current);
-         console.trace();
-      }
       const boardBounds = document.getElementById("board")!.getBoundingClientRect();
       const pieceBounds = elemRef.current!.getBoundingClientRect();
 
       const elem = elemRef.current!;
       elem.style.left = x - boardBounds.x - pieceBounds.width/2 + "px";
       elem.style.top = y - boardBounds.y - pieceBounds.height/2 + "px";
-   }, [piece]);
+   }, []);
 
    const mouseUp = useCallback((): void => {
       const startX = piece.square % 8;
@@ -177,12 +173,10 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
 
          document.removeEventListener("mouseup", mouseUp);
          document.removeEventListener("mousemove", mouseMove);
-
-         // uncolourMoves();
       } else {
          cancelMove();
       }
-   }, [movePiece, piece.square, mouseMove]);
+   }, [movePiece, piece, mouseMove]);
 
    const mouseDown = (): void => {
       const canMove = gameBoard.currentPlayer === PlayerColours.White;
@@ -250,8 +244,23 @@ export const Game = () => {
       setValue(value => value + 1);
    }, []);
 
+   // 58 -> 23
+
    // useEffect(() => {
-   //    console.log("rem");
+   //    setTimeout(() => {
+   //       const castlingRightsBeforeMove = gameBoard.castlingRights;
+   //       const move = new Move(58, 23);
+   //       gameBoard.makeMove(move);
+   //       updateBoard();
+
+   //       setTimeout(() => {
+   //          gameBoard.undoMove(move, castlingRightsBeforeMove);
+   //          updateBoard();
+   //       }, 500);
+   //    }, 500);
+   // }, []);
+
+   // useEffect(() => {
    //    const colour = PlayerColours.White;
 
    //    for (let i = 0; i < 64; i++) {
@@ -289,7 +298,7 @@ export const Game = () => {
          setTimeout(() => {
             const computerMove = generateComputerMove(gameBoard);
             movePiece(computerMove);
-         }, Math.random() * 200 + 200);
+         }, 50);
       }
 
       // Uncolour previously coloured board squares
@@ -318,7 +327,7 @@ export const Game = () => {
       const enemyColour = colour ? 0 : 1;
       const isCheckmate = gameBoard.isCheckmate(enemyColour);
 
-      const attackedSquares = gameBoard.attackedSquares[colour];
+      const attackedSquares = gameBoard.squaresBeingAttackedBy[colour];
       const hasCheckedEnemyKing = attackedSquares.hasOwnProperty(enemyKingSquare);
 
       if (isCheckmate) {

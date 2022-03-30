@@ -1,7 +1,14 @@
 export enum MoveFlags {
    None,
    IsCastling,
-   QueenPromotion
+   IsQueenPromotion,
+   IsRookPromotion,
+   IsKnightPromotion,
+   IsBishopPromotion
+}
+
+export function getPromotionFlags(): Array<MoveFlags> {
+   return [MoveFlags.IsQueenPromotion, MoveFlags.IsRookPromotion, MoveFlags.IsKnightPromotion, MoveFlags.IsBishopPromotion];
 }
 
 class Move {
@@ -19,6 +26,11 @@ class Move {
       } else {
          this.flags = MoveFlags.None
       }
+   }
+
+   public isPromoting(): boolean {
+      const promotionFlags = getPromotionFlags();
+      return promotionFlags.includes(this.flags);
    }
 }
 

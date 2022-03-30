@@ -9,8 +9,25 @@
    background-color: #eee;
    border-radius: 5px;
    padding: 5px;
-   margin: 5px;
+   margin: 1rem;
 }
-#menu p {
-   margin: 0;
+#menu .player-container:last-child .player-colour {
+   text-align: right;
+}
+#menu .player-colour {
+   font-size: 1.5rem;
+   font-weight: bold;
+   margin: 0 0 0.5rem;
+}
+#menu .section {
+   text-align: center;
+   margin: 10px 0;
+}
+
+#game-title {
+   text-align: center;
+   color: #fff;
+   width: 100%;
+   position: absolute;
+   top: 1rem;
 }

@@ -1,5 +1,6 @@
 import Board, { CastlingIndexes } from "./Board";
-import Move, { MoveFlags } from "./Move";
+import { evaluatePosition } from "./evaluation";
+import Move, { getPromotionFlags, MoveFlags } from "./Move";
 import Piece, { PieceTypes } from "./Piece";
 
 export enum PlayerColours {
@@ -41,60 +42,6 @@ const precomputeMoveData = (): void => {
          ];
       }
    }
-}
-
-const FEN_PIECE_REFERENCES: { [key: string]: PieceTypes } = {
-   "k": PieceTypes.King,
-   "q": PieceTypes.Queen,
-   "r": PieceTypes.Rook,
-   "n": PieceTypes.Knight,
-   "b": PieceTypes.Bishop,
-   "p": PieceTypes.Pawn
-}
-
-export function generateBoardFromFen(fen: string): Board {
-   const fields = fen.split(" ");
-   
-   const squares = new Array<Piece | null>(64);
-   const ranks = fields[0].split("/");
-   for (let i = 0; i < 8; i++) {
-      const rank = ranks[i];
-
-      let square = i * 8;
-      for (const char of rank.split("")) {
-         // If the character is a number, skip that number of squares
-         const num = Number(char);
-         const charIsNumber = !isNaN(num);
-         if (charIsNumber) {
-            // Fill the skipped squares with null
-            for (let j = 0; j < num; j++) {
-               squares[square + j] = null;
-            }
-
-            square += num;
-            continue;
-         }
-
-         const lowerChar = char.toLowerCase();
-
-         // Get the piece colour
-         const pieceColour: PlayerColours = char === lowerChar ? PlayerColours.Black : PlayerColours.White;
-
-         // Add the piece to the board squares
-         const pieceType: PieceTypes = FEN_PIECE_REFERENCES[lowerChar];
-         const piece = new Piece(pieceType, pieceColour, square);
-         squares[square] = piece;
-
-         square++;
-      }
-   }
-
-   const activeColour = fields[1] === "w" ? PlayerColours.White : PlayerColours.Black;
-
-   const castlingRights = fields[2] === "-" ? 0 : Board.generateCastlingRights(fields[2]);
-
-   const board = new Board(squares, activeColour, castlingRights);
-   return board;
 }
 
 precomputeMoveData();
@@ -233,14 +180,28 @@ const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean):
       case PieceTypes.Pawn: {
          const direction = piece.colour === PlayerColours.White ? -1 : 1;
 
+         const rank = Math.floor(piece.square / 8);
+
          // Forwards move
          const targetSquare = piece.square + 8 * direction;
          if (!allowOwnColour && board.squares[targetSquare] === null) {
-            addRegularMove(targetSquare);
+            // If the pawn can promote
+            const pawnCanPromote = (rank === 1 && piece.colour === PlayerColours.White) || (rank === 6 && piece.colour === PlayerColours.Black);
+
+            if (pawnCanPromote) {
+               const promotionFlags = getPromotionFlags();
+
+               for (const promotionFlag of promotionFlags) {
+                  const move = new Move(piece.square, targetSquare, promotionFlag);
+                  moves.push(move);
+               }
+            } else {
+               addRegularMove(targetSquare);
+            }
          }
 
          // Double move
-         if (!allowOwnColour && Math.floor(piece.square / 8) === (piece.colour === PlayerColours.White ? 6 : 1)) {
+         if (!allowOwnColour && rank === (piece.colour === PlayerColours.White ? 6 : 1)) {
             // Make sure the pawn doesn't pass through any pieces
             let moveIsAllowed = true;
             const direction = piece.colour === PlayerColours.White ? -8 : 8;
@@ -260,22 +221,23 @@ const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean):
             }
          }
 
+         // Don't capture if the pawn is on the last rank
+         const isInvalidCapture = rank === 0 || rank === 7;
+
          // Capture moves
-         for (let i = 0; i < 2; i++) {
-            const xOffset = i === 0 ? -1 : 1;
-
-            // Stop from wrapping around
-            if ((xOffset === -1 && piece.square % 8 === 0) || (xOffset === 1 && piece.square % 8 === 7)) continue;
-
-            const targetSquare = piece.square + 8 * direction + xOffset;
-            const targetPiece = board.squares[targetSquare];
-
-            if (typeof targetPiece === "undefined") {
-               console.log(piece, piece.square);
-               console.log(targetSquare, targetPiece);
-            }
-            if (allowOwnColour || (targetPiece !== null && targetPiece.colour !== piece.colour)) {
-               addRegularMove(targetSquare);
+         if (!isInvalidCapture) {
+            for (let i = 0; i < 2; i++) {
+               const xOffset = i === 0 ? -1 : 1;
+               
+               // Stop from wrapping around
+               if ((xOffset === -1 && piece.square % 8 === 0) || (xOffset === 1 && piece.square % 8 === 7)) continue;
+               
+               const targetSquare = piece.square + 8 * direction + xOffset;
+               const targetPiece = board.squares[targetSquare];
+               
+               if (allowOwnColour || (targetPiece !== null && targetPiece.colour !== piece.colour)) {
+                  addRegularMove(targetSquare);
+               }
             }
          }
 
@@ -315,7 +277,7 @@ const generatePseudoLegalMoves = (board: Board, colour: PlayerColours): Array<Mo
    return moves;
 }
 
-export function validatePseudoLegalMoves(board: Board, pseudoLegalMoves: Array<Move>, colour: PlayerColours): Array<Move> {
+export function validatePseudoLegalMoves(board: Board, pseudoLegalMoves: Array<Move>, colour: PlayerColours, m: boolean = false): Array<Move> {
    const legalMoves = new Array<Move>();
 
    const opponentColour = colour ? 0 : 1;
@@ -347,7 +309,7 @@ export function validatePseudoLegalMoves(board: Board, pseudoLegalMoves: Array<M
          legalMoves.push(moveToVerify);
       }
 
-      board.unmakeMove(moveToVerify, castlingRightsBeforeMove);
+      board.undoMove(moveToVerify, castlingRightsBeforeMove);
    }
 
    return legalMoves;
@@ -364,9 +326,83 @@ export function generateLegalMoves(board: Board, colour: PlayerColours): Array<M
    return legalMoves;
 }
 
-export function generateComputerMove(board: Board): Move {
-   const moves: Array<Move> = generateLegalMoves(board, PlayerColours.Black);
+const SEARCH_DEPTH = 4;
+
+// Generate all possible moves that the computer than make then evaluate those positions recursively
+// Make the move that maximises the result of the evaluation function
+const search = (board: Board, depth: number, colour: PlayerColours, alpha: number = -1000, beta: number = 1000): number | Move => {
+   // If the max depth is reached, return the position's evaluation
+   if (depth === 0) {
+      // As opposed to just counting up the position's value, account for any captures the opponent could make on the next move.
+      return evaluatePosition(board, colour);
+   }
+
+   let bestMove!: Move;
+
+   const playerMoves = generateLegalMoves(board, colour);
+
+   // TODO: Make a more efficient way of getting piece squares than a loop
+   // Check if it is checkmate or stalemate
+   // if (playerMoves.length === 0) {
+
+   // }
+
+   if (playerMoves.length === 0) {
+      let kingSquareIndex!: number;
+      for (let squareIndex = 0; squareIndex < 64; squareIndex++) {
+         const piece = board.squares[squareIndex];
+         if (piece?.type === PieceTypes.King && piece.colour === colour) {
+            kingSquareIndex = squareIndex;
+            break;
+         }
+      }
+
+      // If you are in checkmate, return negative infinity
+      if (board.squaresBeingAttackedBy[colour].hasOwnProperty(kingSquareIndex)) {
+         return -999999;
+      }
+
+      // Otherwise if it's a stalemate, return 0
+      return 0;
+   }
    
-   const randomMove = moves[Math.floor(Math.random() * moves.length)];
-   return randomMove;
+   // For every move, see what the evaluation of the best response for the opponent is.
+   for (const move of playerMoves) {
+      const castlingRightsBeforeMove = board.castlingRights;
+      board.makeMove(move);
+
+      const obamaGaming = board.lastCapturedPiece.slice() as [Piece | null, Piece | null];
+      /** How good the opponent's best response is. */
+      const moveEvaluation: number = -search(board, depth - 1, colour ? 0 : 1, -beta, -alpha);
+      board.lastCapturedPiece = obamaGaming;
+
+      board.undoMove(move, castlingRightsBeforeMove);
+
+      // If the opponent's response was too good, prune this branch so no time is wasted
+      if (moveEvaluation >= beta) {
+         return beta;
+      }
+
+      if (moveEvaluation > alpha) {
+         alpha = moveEvaluation;
+         bestMove = move;
+      }
+   }
+
+   if (depth === SEARCH_DEPTH) {
+      return bestMove;
+   } else {
+      return alpha;
+   }
+}
+
+export function generateComputerMove(board: Board): Move {
+   // Uncomment the following lines to use random move generation
+
+   // const moves: Array<Move> = generateLegalMoves(board, PlayerColours.Black);
+   // const randomMove = moves[Math.floor(Math.random() * moves.length)];
+   // return randomMove;
+
+   const move: Move = search(board, SEARCH_DEPTH, PlayerColours.Black) as Move;
+   return move;
 }

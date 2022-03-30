@@ -11,7 +11,7 @@ export enum PieceTypes {
 
 class Piece {
    public readonly colour: PlayerColours;
-   public readonly type: PieceTypes;
+   public type: PieceTypes;
 
    public square: number;
 
