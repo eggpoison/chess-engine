@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import ReactDOM from "react-dom";
 import AudioFromFile from "../AudioFromFile";
 import Board, { GameResults } from "../Board";
-import { generateComputerMove, generatePieceMoves, PlayerColours, validatePseudoLegalMoves } from "../computer-ai";
+import { generateComputerMove, generateLegalMoves, generatePieceMoves, PlayerColours, validatePseudoLegalMoves } from "../computer-ai";
 import { generateBoardFromFenString } from "../fen-strings";
 import Move, { MoveFlags } from "../Move";
 import Piece, { PieceTypes } from "../Piece";
 import SETTINGS from "../settings";
 
 const startingPositionFenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-// const startingPositionFenString = "7k/8/P7/8/8/8/1PPPPPPP/RNBQKBNR w KQkq - 0 1";
+// const startingPositionFenString = "rnbqkbnr/pppppppp/8/1b6/8/8/PPPP1PPP/RNBQK2R w KQkq - 0 1";
 export let gameBoard: Board = generateBoardFromFenString(startingPositionFenString);
 
-const getIconOffset = (piece: Piece): [number, number] => {
-   const x = piece.type;
-   const y = piece.colour;
+const getIconOffset = (pieceType: PieceTypes, pieceColour: PlayerColours): [number, number] => {
+   const x = pieceType;
+   const y = pieceColour;
 
    return [x, y];
 }
@@ -22,7 +23,7 @@ const getIconOffset = (piece: Piece): [number, number] => {
 let colouredBoardSquareIndexes = new Array<number>();
 const boardSquares = new Array<HTMLElement>(64);
 
-type BoardSquareColourType = "Potential move" | "Piece previous position";
+type BoardSquareColourType = "Potential move" | "Move start" | "Move end";
 export function colourBoardSquare(square: number, colourType: BoardSquareColourType): void {
    const boardSquare = boardSquares[square];
    
@@ -31,8 +32,12 @@ export function colourBoardSquare(square: number, colourType: BoardSquareColourT
          boardSquare.classList.add("legal-move");
          break;
       }
-      case "Piece previous position": {
-         boardSquare.classList.add("previous-move");
+      case "Move start": {
+         boardSquare.classList.add("move-start");
+         break;
+      }
+      case "Move end": {
+         boardSquare.classList.add("move-end");
          break;
       }
    }
@@ -40,7 +45,7 @@ export function colourBoardSquare(square: number, colourType: BoardSquareColourT
    colouredBoardSquareIndexes.push(square);
 }
 export function uncolourBoardSquare(square: number): void {
-   const potentialClassNames: ReadonlyArray<string> = ["legal-move", "previous-move"];
+   const potentialClassNames: ReadonlyArray<string> = ["legal-move", "move-start", "move-end"];
 
    const boardSquare = boardSquares[square];
    for (const className of potentialClassNames) {
@@ -57,6 +62,60 @@ const clearBoardSquareColours = (): void => {
    }
 }
 
+interface PromotionPromptIconProps {
+   pieceType: PieceTypes;
+   select: (pieceType: PieceTypes) => void;
+}
+const PromotionPromptIcon = ({ pieceType, select }: PromotionPromptIconProps) => {
+   const [xOffset, yOffset] = getIconOffset(pieceType, PlayerColours.White);
+   const style: React.CSSProperties = {
+      backgroundPositionX: `-${xOffset * 40}px`,
+      backgroundPositionY: `${yOffset * 40}px`
+   }
+
+   return <div onClick={() => select(pieceType)} className="icon" style={style}></div>;
+}
+
+interface PromotionPromptProps {
+   select: (pieceType: PieceTypes) => void;
+}
+const PromotionPrompt = ({ select }: PromotionPromptProps) => {
+   const elemRef = useRef<HTMLDivElement | null>(null);
+
+   useEffect(() => {
+      const elem = elemRef.current!;
+
+      const event = window.event as MouseEvent;
+      elem.style.left = event.clientX + "px";
+      elem.style.top = event.clientY + "px";
+   }, []);
+
+   return <div className="promotion-prompt" ref={elemRef}>
+      <PromotionPromptIcon pieceType={PieceTypes.Queen} select={select} />
+      <PromotionPromptIcon pieceType={PieceTypes.Rook} select={select} />
+      <PromotionPromptIcon pieceType={PieceTypes.Knight} select={select} />
+      <PromotionPromptIcon pieceType={PieceTypes.Bishop} select={select} />
+   </div>;
+}
+
+const promptPromotionType = (): Promise<PieceTypes> => {
+   return new Promise(resolve => {
+      const container = document.createElement("div");
+      document.getElementById("root")?.appendChild(container);
+
+      const select = (pieceType: PieceTypes): void => {
+         resolve(pieceType);
+
+         // Remove the promotion prompt
+         ReactDOM.unmountComponentAtNode(container);
+         container.remove();
+      }
+
+      const promotionPrompt = <PromotionPrompt select={select} />;
+      ReactDOM.render(promotionPrompt, container);
+   });
+}
+
 interface PieceIconProps {
    piece: Piece;
    movePiece: (move: Move) => void;
@@ -64,8 +123,9 @@ interface PieceIconProps {
 const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
    const elemRef = useRef<HTMLDivElement>(null);
    const moves = useRef<Array<Move> | null>(null);
+   const isPromptingPromotion = useRef<boolean>(false);
 
-   const [xOffset, yOffset] = getIconOffset(piece);
+   const [xOffset, yOffset] = getIconOffset(piece.type, piece.colour);
    const style: React.CSSProperties = {
       backgroundPositionX: `-${xOffset * SETTINGS.iconSize}px`,
       backgroundPositionY: `${yOffset * SETTINGS.iconSize}px`
@@ -83,11 +143,16 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
          colourBoardSquare(legalMove.targetSquare, "Potential move");
       }
 
+      // Colour start square
+      colourBoardSquare(piece.square, "Move start");
+
       const elem = elemRef.current!;
       elem.classList.add("dragging");
    }
 
    const mouseMove = useCallback((): void => {
+      if (isPromptingPromotion.current) return;
+
       const event = window.event as MouseEvent;
 
       const x = event.clientX;
@@ -101,7 +166,9 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
       elem.style.top = y - boardBounds.y - pieceBounds.height/2 + "px";
    }, []);
 
-   const mouseUp = useCallback((): void => {
+   const mouseUp = useCallback(async (): Promise<void> => {
+      if (isPromptingPromotion.current) return;
+
       const startX = piece.square % 8;
       const startY = Math.floor(piece.square / 8);
 
@@ -110,6 +177,9 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
          for (const move of moves.current!) {
             uncolourBoardSquare(move.targetSquare);
          }
+
+         // Uncolour the start square
+         uncolourBoardSquare(piece.square);
       }
 
       const cancelMove = (): void => {
@@ -166,6 +236,15 @@ const PieceIcon = ({ piece, movePiece }: PieceIconProps) => {
                move = currentMove;
                break;
             }
+         }
+
+         if (move.isPromoting()) {
+            isPromptingPromotion.current = true;
+            
+            const promotionPieceType: PieceTypes = await promptPromotionType();
+            move.changePromotionFlag(promotionPieceType);
+
+            isPromptingPromotion.current = false;
          }
 
          // Move the piece
@@ -260,18 +339,18 @@ export const Game = () => {
    //    }, 500);
    // }, []);
 
-   // useEffect(() => {
-   //    const colour = PlayerColours.White;
+   useEffect(() => {
+      const colour = PlayerColours.White;
 
-   //    for (let i = 0; i < 64; i++) {
-   //       const squareElem = boardSquares[i];
-   //       if (gameBoard.attackedSquares[colour].hasOwnProperty(i)) {
-   //          squareElem.style.backgroundColor = "blue";
-   //       } else {
-   //          squareElem.style.backgroundColor = "red";
-   //       }
-   //    }
-   // }, [value]);
+      for (let i = 0; i < 64; i++) {
+         const squareElem = boardSquares[i];
+         if (gameBoard.squaresBeingAttackedBy[colour].hasOwnProperty(i)) {
+            squareElem.style.backgroundColor = "blue";
+         } else {
+            squareElem.style.backgroundColor = "red";
+         }
+      }
+   }, [value]);
 
    const endGame = (winningColour: PlayerColours | null): void => {
       const board = boardRef.current!;
@@ -305,8 +384,8 @@ export const Game = () => {
       clearBoardSquareColours();
 
       // Colour the board squares
-      colourBoardSquare(move.startSquare, "Piece previous position");
-      colourBoardSquare(move.targetSquare, "Piece previous position");
+      colourBoardSquare(move.startSquare, "Move start");
+      colourBoardSquare(move.targetSquare, "Move end");
 
       const colour = gameBoard.squares[move.startSquare]!.colour;
       const targetPiece = gameBoard.squares[move.targetSquare];
@@ -314,41 +393,41 @@ export const Game = () => {
       // Make the new position
       gameBoard.makeMove(move);
 
-      let enemyKingSquare!: number;
-      for (let square = 0; square < 64; square++) {
-         const piece = gameBoard.squares[square];
-         if (piece !== null && piece.type === PieceTypes.King && piece.colour !== colour) {
-            enemyKingSquare = square;
-            break;
+      const enemyColour = colour ? 0 : 1;
+
+      const enemyKing = gameBoard.pieces[enemyColour][PieceTypes.King][0];
+      const attackedSquares = gameBoard.squaresBeingAttackedBy[colour];
+      const isCheckingEnemyKing = attackedSquares.hasOwnProperty(enemyKing.square);
+
+      // Check if the game has ended
+      const opponentResponses = generateLegalMoves(gameBoard, enemyColour);
+      if (opponentResponses.length === 0) {
+         console.log(isCheckingEnemyKing);
+         if (isCheckingEnemyKing) {
+            endGame(colour);
+         } else {
+            endGame(null);
          }
       }
 
-      // Check if the move checkmated the enemy
-      const enemyColour = colour ? 0 : 1;
-      const isCheckmate = gameBoard.isCheckmate(enemyColour);
-
-      const attackedSquares = gameBoard.squaresBeingAttackedBy[colour];
-      const hasCheckedEnemyKing = attackedSquares.hasOwnProperty(enemyKingSquare);
-
-      if (isCheckmate) {
-         endGame(colour);
+      if (gameResult.current !== GameResults.None) {
          new AudioFromFile("win.mp3");
-      } else if (hasCheckedEnemyKing) {
+      } else if (isCheckingEnemyKing) {
          new AudioFromFile("check.mp3");
       } else {
          switch (move.flags) {
-            case MoveFlags.None: {
+            case MoveFlags.IsCastling: {
+               new AudioFromFile("castling.mp3");
+               
+               break;
+            }
+            default: {
                if (targetPiece !== null) {
                   // If a piece has been captured
                   new AudioFromFile("capture.mp3");
                } else {
                   new AudioFromFile("move.mp3");
                }
-               
-               break;
-            }
-            case MoveFlags.IsCastling: {
-               new AudioFromFile("castling.mp3");
                
                break;
             }
@@ -361,7 +440,7 @@ export const Game = () => {
       updateBoard();
 
       // If the computer is the current player, make its move
-      if (!gameResult.current && gameBoard.currentPlayer === PlayerColours.Black) {
+      if (gameResult.current === GameResults.None && gameBoard.currentPlayer === PlayerColours.Black) {
          makeComputerMove();
       }
    }, [updateBoard]);

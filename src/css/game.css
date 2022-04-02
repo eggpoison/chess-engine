@@ -42,7 +42,10 @@
 #board .square.square-2.legal-move {
    background-color: rgb(180, 0, 0);
 }
-#board .square.previous-move {
+#board .square.move-start {
+   background-color: rgb(216, 176, 67);
+}
+#board .square.move-end {
    background-color: rgb(216, 201, 67);
 }
 #board .square .icon {
@@ -80,4 +83,28 @@
    left: 50%;
    transform: translate(-50%, -50%);
    user-select: none;
+}
+
+.promotion-prompt {
+   --icon-size: 40px;
+   width: calc(var(--icon-size) * 2);
+   height: calc(var(--icon-size) * 2);
+   background-color: #fff;
+   border: 3px solid #000;
+   border-radius: 10px;
+   position: absolute;
+}
+.promotion-prompt .icon {
+   width: var(--icon-size);
+   height: var(--icon-size);
+   background-image: url("../images/piece-icons.png");
+   background-size: calc(var(--icon-size) * 6) calc(var(--icon-size) * 2);
+   cursor: pointer;
+   z-index: 1;
+   display: inline-block;
+   opacity: 0.8;
+}
+.promotion-prompt .icon:hover {
+   background-color: rgba(0, 0, 0, 0.05);
+   opacity: 1;
 }

@@ -1,3 +1,5 @@
+import { PieceTypes } from "./Piece";
+
 export enum MoveFlags {
    None,
    IsCastling,
@@ -31,6 +33,27 @@ class Move {
    public isPromoting(): boolean {
       const promotionFlags = getPromotionFlags();
       return promotionFlags.includes(this.flags);
+   }
+
+   public changePromotionFlag(pieceType: PieceTypes): void {
+      switch (pieceType) {
+         case PieceTypes.Queen: {
+            this.flags = MoveFlags.IsQueenPromotion;
+            break;
+         }
+         case PieceTypes.Rook: {
+            this.flags = MoveFlags.IsRookPromotion;
+            break;
+         }
+         case PieceTypes.Knight: {
+            this.flags = MoveFlags.IsKnightPromotion;
+            break;
+         }
+         case PieceTypes.Bishop: {
+            this.flags = MoveFlags.IsBishopPromotion;
+            break;
+         }
+      }
    }
 }
 

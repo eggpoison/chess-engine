@@ -1,6 +1,7 @@
 import Board, { CastlingIndexes } from "./Board";
 import { evaluatePosition } from "./evaluation";
 import Move, { getPromotionFlags, MoveFlags } from "./Move";
+import { orderMoves } from "./move-ordering";
 import Piece, { PieceTypes } from "./Piece";
 
 export enum PlayerColours {
@@ -141,6 +142,14 @@ const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean):
                   pieceIsInWay = true;
                   break;
                }
+
+               // If the piece is under attack by the enemy, don't castle
+               const enemyColour = piece.colour ? 0 : 1;
+               const squareIsAttacked = board.squaresBeingAttackedBy[enemyColour].hasOwnProperty(square);
+               if (squareIsAttacked) {
+                  pieceIsInWay = true;
+                  break;
+               }
             }
             if (pieceIsInWay) continue;
 
@@ -246,6 +255,30 @@ const generateMiscMoves = (board: Board, piece: Piece, allowOwnColour: boolean):
    }
 
    return moves;
+}
+
+export function getSlidingPiecesRevealedByMove(board: Board, squareIndex: number): Array<Piece> {
+   const piecesRevealed = new Array<Piece>();
+
+   for (let direction = 0; direction < 8; direction++) {
+      for (let i = 0; i < numSquaresToEdge[squareIndex][direction]; i++) {
+         const targetSquare = squareIndex + DIRECTION_OFFSETS[direction] * (i + 1);
+         const targetPiece = board.squares[targetSquare];
+
+         // If the ray is blocked by a piece
+         if (targetPiece !== null) {
+            // If the piece is a sliding piece, add it to the array of revealed pieces
+            const slidingPieceTypes: ReadonlyArray<PieceTypes> = [PieceTypes.Queen, PieceTypes.Rook, PieceTypes.Bishop];
+            if (slidingPieceTypes.includes(targetPiece.type)) {
+               piecesRevealed.push(targetPiece);
+            }
+
+            break;
+         }
+      }
+   }
+
+   return piecesRevealed;
 }
 
 /**
@@ -365,9 +398,12 @@ const search = (board: Board, depth: number, colour: PlayerColours, alpha: numbe
       // Otherwise if it's a stalemate, return 0
       return 0;
    }
+
+   // Order the moves to make alpha-beta pruning more effective
+   const orderedMoves: Array<Move> = orderMoves(board, playerMoves);
    
    // For every move, see what the evaluation of the best response for the opponent is.
-   for (const move of playerMoves) {
+   for (const move of orderedMoves) {
       const castlingRightsBeforeMove = board.castlingRights;
       board.makeMove(move);
 

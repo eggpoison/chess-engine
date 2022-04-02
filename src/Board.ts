@@ -1,4 +1,4 @@
-import { generateLegalMoves, generatePieceMoves, PlayerColours } from "./computer-ai";
+import { generateLegalMoves, generatePieceMoves, getSlidingPiecesRevealedByMove, PlayerColours } from "./computer-ai";
 import Move, { getPromotionFlags, MoveFlags } from "./Move";
 import Piece, { PieceTypes } from "./Piece";
 
@@ -46,8 +46,8 @@ class Board {
       this.currentPlayer = currentPlayer;
       this.castlingRights = castlingRights;
 
-      this.squaresBeingAttackedBy[PlayerColours.White] = Board.calculateAttackedSquares(this, PlayerColours.White);
-      this.squaresBeingAttackedBy[PlayerColours.Black] = Board.calculateAttackedSquares(this, PlayerColours.Black);
+      this.calculateAttackedSquares(PlayerColours.White);
+      this.calculateAttackedSquares(PlayerColours.Black);
    }
 
    static generateCastlingRights(rawData: string): number {
@@ -67,27 +67,152 @@ class Board {
 
    /**
     * Calculate which squares are being attacked by a colour
-    * @param board The board
     * @param colour The colour of the attacked squares
     */
-   static calculateAttackedSquares(board: Board, colour: PlayerColours): AttackedSquares {
+   private calculateAttackedSquares(colour: PlayerColours): void {
       const attackedSquares: AttackedSquares = {};
 
-      for (const piece of board.squares) {
-         if (piece === null || piece.colour !== colour) continue;
+      for (let i = 0; i < 6; i++) {
+         const pieceType = i as PieceTypes;
 
-         const attackingMoves = generatePieceMoves(board, piece, true);
+         const pieces = this.pieces[colour][pieceType];
 
-         for (const move of attackingMoves) {
-            if (attackedSquares.hasOwnProperty(move.targetSquare)) {
-               attackedSquares[move.targetSquare].push(piece);
-            } else {
-               attackedSquares[move.targetSquare] = [piece];
+         for (const piece of pieces) {
+            const attackingMoves = generatePieceMoves(this, piece, true);
+            
+            for (const move of attackingMoves) {
+               if (attackedSquares.hasOwnProperty(move.targetSquare)) {
+                  attackedSquares[move.targetSquare].push(piece);
+               } else {
+                  attackedSquares[move.targetSquare] = [piece];
+               }
             }
+
+            piece.previousAttackedSquares = attackingMoves.map(move => move.targetSquare);
          }
       }
 
-      return attackedSquares;
+      this.squaresBeingAttackedBy[colour] = attackedSquares;
+   }
+
+   private recalculatePieceAttackedSquares(piece: Piece, a: Piece): void {
+      const colour = piece.colour;
+
+      // Remove previously attacked squares
+      const previousAttackedSquares = piece.previousAttackedSquares;
+      for (const square of previousAttackedSquares) {
+         const attackedSquare = this.squaresBeingAttackedBy[colour][square];
+         if (typeof attackedSquare === "undefined") {
+            console.warn("Tried to remove piece from square", square, "but it didn't exist!");
+            console.log(this.squaresBeingAttackedBy[colour]);
+            console.log("Current squares:", this.squares.slice());
+            console.log(piece);
+            console.log(a);
+         }
+         attackedSquare.splice(attackedSquare.indexOf(piece), 1);
+
+         if (attackedSquare.length === 0) {
+            // console.log("Square " + square + " has been banned!");
+            if (square === 58) {
+               console.warn("Removed 58!");
+               // console.log(this.squares.slice());
+               // throw new Error("U");
+            }
+            delete this.squaresBeingAttackedBy[colour][square];
+         }
+      }
+
+      // Generate new attacked squares
+      const squaresBeingAttacked = generatePieceMoves(this, piece, true).map(move => move.targetSquare);
+      // console.log(piece.square, squaresBeingAttacked);
+
+      for (const square of squaresBeingAttacked) {
+         const isAlreadyAttacked = this.squaresBeingAttackedBy[colour].hasOwnProperty(square);
+
+         if (isAlreadyAttacked && this.squaresBeingAttackedBy[colour][square].includes(piece)) continue;
+
+         if (!isAlreadyAttacked) {
+            this.squaresBeingAttackedBy[colour][square] = new Array<Piece>();
+            if (square === 58) {
+               console.warn("58 is back");
+            }
+         }
+         this.squaresBeingAttackedBy[colour][square].push(piece);
+         if (this.squaresBeingAttackedBy[colour][square].length === 0) {
+            throw new Error("E");
+         }
+      }
+
+      // Update the previously attacked squares
+      piece.previousAttackedSquares = squaresBeingAttacked;
+   }
+
+   private recalculateAttackedSquares(move: Move, type: "make" | "undo", previouslyAttackedSquares: Array<number>, newAttackedSquares: Array<number>): void {
+      // Problem: when a piece is moved, any sliding pieces which had been blocked by the piece but are revealed
+      // don't get accounted for
+
+      const piece = type === "make" ? this.squares[move.targetSquare]! : this.squares[move.startSquare]!;
+      const colour = piece.colour;
+
+      const squaresInCommon = new Array<number>();
+
+      const filteredPreviouslyAttackedSquares = new Array<number>();
+      const filteredNewAttackedSquares = new Array<number>();
+
+      for (const square of previouslyAttackedSquares) {
+         if (newAttackedSquares.includes(square)) {
+            squaresInCommon.push(square);
+         } else {
+            filteredPreviouslyAttackedSquares.push(square);
+         }
+      }
+
+      for (const square of newAttackedSquares) {
+         if (!squaresInCommon.includes(square)) {
+            filteredNewAttackedSquares.push(square);
+         }
+      }
+
+      // Remove previously attacked squares
+      for (const square of previouslyAttackedSquares) {
+         const attackedArray = this.squaresBeingAttackedBy[colour][square];
+         if (typeof attackedArray === "undefined") {
+            // console.warn("cring!");
+            // console.log(square, piece);
+            // console.log(this.squaresBeingAttackedBy[colour]);
+            // console.log(filteredPreviouslyAttackedSquares, filteredNewAttackedSquares);
+         }
+         attackedArray.splice(attackedArray.indexOf(piece), 1);
+
+         if (attackedArray.length === 0) {
+            if (square === 58) {
+               console.warn("hes gone again");
+               // console.log(this.squares.slice());
+               // console.log(piece);
+            }
+            delete this.squaresBeingAttackedBy[colour][square];
+         }
+      }
+
+      // Add new attacked squares
+      for (const square of newAttackedSquares) {
+         if (!this.squaresBeingAttackedBy[colour].hasOwnProperty(square)) {
+            this.squaresBeingAttackedBy[colour][square] = new Array<Piece>();
+         }
+         this.squaresBeingAttackedBy[colour][square].push(piece);
+      }
+
+      // If moving the piece from its starting position allows any sliding pieces to move, account for those new moves
+      const piecesRevealedAtStart = getSlidingPiecesRevealedByMove(this, move.startSquare);
+      const piecesRevealedAtEnd = getSlidingPiecesRevealedByMove(this, move.targetSquare);
+      const piecesRevealed = [ ...piecesRevealedAtStart, ...piecesRevealedAtEnd ];
+
+      for (const pieceRevealed of piecesRevealed) {
+         // Don't recalculate if the piece is the piece which has moved!
+         if (pieceRevealed === piece) continue;
+
+         this.recalculatePieceAttackedSquares(pieceRevealed, piece);
+      }
    }
 
    private updateCastlingRights(move: Move, type: "make" | "unmake", castlingRightsBeforeMove?: number): void {
@@ -140,6 +265,14 @@ class Board {
    makeMove(move: Move): void {
       const movingPiece = this.squares[move.startSquare]!;
 
+      // Used when recalculating attacked squares
+      const previouslyAttackedSquares = generatePieceMoves(this, movingPiece, true).map(move => move.targetSquare);
+      // if (move.targetSquare === 51 && movingPiece.type === PieceTypes.Bishop) {
+      //    console.log(movingPiece.square);
+      //    console.log(this.squares.slice());
+      //    console.log(previouslyAttackedSquares);
+      // }
+
       // If the piece is a king or a rook, remove the possibility to castle
       if (movingPiece.type === PieceTypes.King || movingPiece.type === PieceTypes.Rook) {
          this.updateCastlingRights(move, "make");
@@ -148,9 +281,10 @@ class Board {
       // Update the captured piece
       const opposingColour = movingPiece.colour ? 0 : 1;
       const targetPiece = this.squares[move.targetSquare];
-
+      // Remove the captured piece from the piece array
       if (targetPiece !== null) {
-         // Remove the captured piece from the piece array
+         const pieceArray = this.pieces[targetPiece.colour][targetPiece.type];
+         pieceArray.splice(pieceArray.indexOf(targetPiece), 1);
       }
       this.lastCapturedPiece[opposingColour] = targetPiece;
 
@@ -183,16 +317,40 @@ class Board {
          this.squares[rookStartSquare] = null;
          this.squares[rookTargetSquare] = rook;
       } else if (isPromoting) {
-         // Change the pawn to a queen
-         movingPiece.type = PieceTypes.Queen;
+         // Change the pawn to its promoted piece type
+         switch (move.flags) {
+            case MoveFlags.IsQueenPromotion: {
+               movingPiece.type = PieceTypes.Queen;
+               break;
+            }
+            case MoveFlags.IsRookPromotion: {
+               movingPiece.type = PieceTypes.Rook;
+               break;
+            }
+            case MoveFlags.IsKnightPromotion: {
+               movingPiece.type = PieceTypes.Knight;
+               break;
+            }
+            case MoveFlags.IsBishopPromotion: {
+               movingPiece.type = PieceTypes.Bishop;
+               break;
+            }
+         }
       }
       
-      // Recalculate attacked squares
-      this.squaresBeingAttackedBy[movingPiece.colour] = Board.calculateAttackedSquares(this, movingPiece.colour);
+      const newAttackedSquares = generatePieceMoves(this, movingPiece, true).map(move => move.targetSquare);
+      if (move.targetSquare === 51 && movingPiece.type === PieceTypes.Bishop) {
+         // console.log(movingPiece, previouslyAttackedSquares);
+      }
+      this.recalculateAttackedSquares(move, "make", previouslyAttackedSquares, newAttackedSquares);
    }
 
    undoMove(move: Move, castlingRightsBeforeMove: number): void {
       const movedPiece = this.squares[move.targetSquare]!
+
+      // Used when recalculating attacked squares
+      const previouslyAttackedSquares = generatePieceMoves(this, movedPiece, true).map(move => move.targetSquare);
+      // console.log(previouslyAttackedSquares);
 
       // If the piece is a king or a rook, remove the possibility to castle
       if (movedPiece.type === PieceTypes.King || movedPiece.type === PieceTypes.Rook) {
@@ -206,6 +364,11 @@ class Board {
 
       const capturedColour = movedPiece.colour ? 0 : 1;
       const capturedPiece = this.lastCapturedPiece[capturedColour];
+      // Add the captured piece back to the piece array
+      if (capturedPiece !== null) {
+         const pieceArray = this.pieces[capturedPiece.colour][capturedPiece.type];
+         pieceArray.push(capturedPiece);
+      }
 
       // Move the piece from its current position to its previous one
       this.squares[move.startSquare] = movedPiece;
@@ -241,8 +404,10 @@ class Board {
          movedPiece.type = PieceTypes.Pawn;
       }
       
-      // Recalculate attacked squares
-      this.squaresBeingAttackedBy[movedPiece.colour] = Board.calculateAttackedSquares(this, movedPiece.colour);
+      const newAttackedSquares = generatePieceMoves(this, movedPiece, true).map(move => move.targetSquare);
+      // console.log(newAttackedSquares);
+      this.recalculateAttackedSquares(move, "undo", previouslyAttackedSquares, newAttackedSquares);
+      // console.log("Undo move, recalculate:", this.squaresBeingAttackedBy[movedPiece.colour]);
    }
 
    /**
@@ -312,4 +477,4 @@ class Board {
    }
 }
 
-export default Board; 
+export default Board;
